@@ -1,20 +1,18 @@
 /*
- * Adapted from https://github.com/NVIDIA/FasterTransformer/blob/release/v5.3_tag/src/fastertransformer/kernels/decoder_masked_multihead_attention/decoder_masked_multihead_attention_template.hpp
- * and https://github.com/NVIDIA/FasterTransformer/blob/release/v5.3_tag/src/fastertransformer/kernels/decoder_masked_multihead_attention_utils.h
- * Copyright (c) 2023, The vLLM team.
- * Copyright (c) 2020-2023, NVIDIA CORPORATION.  All rights reserved.
+ * 改编自 https://github.com/NVIDIA/FasterTransformer/blob/release/v5.3_tag/src/fastertransformer/kernels/decoder_masked_multihead_attention/decoder_masked_multihead_attention_template.hpp
+ * 和 https://github.com/NVIDIA/FasterTransformer/blob/release/v5.3_tag/src/fastertransformer/kernels/decoder_masked_multihead_attention_utils.h
+ * 版权所有 (c) 2023, vLLM 团队。
+ * 版权所有 (c) 2020-2023, NVIDIA CORPORATION。保留所有权利。
  *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
+ * 根据 Apache 许可证 2.0 版（"许可证"）进行许可；
+ * 除了遵守许可证外，不得使用此文件。
+ * 您可以在以下位置获得许可证副本：
  *
  *     http://www.apache.org/licenses/LICENSE-2.0
  *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
+ * 除非适用法律要求或书面同意，根据许可证分发的软件
+ * 按"现状"分发，不附带任何明示或暗示的担保条件。
+ * 有关许可证下权限和限制的具体语言，请参见许可证。
  */
 #pragma once
 
@@ -24,7 +22,7 @@
 
 namespace vllm {
 
-// Define custom FP32 vector data types.
+// 定义自定义 FP32 向量数据类型。
 struct Float4_ {
   float2 x;
   float2 y;
@@ -37,7 +35,7 @@ struct Float8_ {
   float2 w;
 };
 
-// FP32 vector types for Q, K, V.
+// 用于 Q, K, V 的 FP32 向量类型。
 template<>
 struct Vec<float, 1> {
   using Type = float;
@@ -51,7 +49,7 @@ struct Vec<float, 4> {
   using Type = float4;
 };
 
-// FP32 accumulator vector types corresponding to Vec.
+// 对应 Vec 的 FP32 累加器向量类型。
 template<>
 struct FloatVec<float> {
   using Type = float;
@@ -65,7 +63,7 @@ struct FloatVec<float4> {
   using Type = float4;
 };
 
-// Vector addition.
+// 向量加法。
 inline __device__ float add(float a, float b) {
   return a + b;
 }
@@ -86,7 +84,7 @@ inline __device__ float4 add(float4 a, float4 b) {
   return c;
 }
 
-// Vector multiplication.
+// 向量乘法。
 template<>
 inline __device__ float mul<float, float>(float a, float b) {
   return a * b;
@@ -128,7 +126,7 @@ inline __device__ float4 mul(float a, float4 b) {
   return c;
 }
 
-// Vector fused multiply-add.
+// 向量融合乘加运算。
 inline __device__ float fma(float a, float b, float c) {
   return a * b + c;
 }
@@ -181,7 +179,7 @@ inline __device__ Float8_ fma(float a, Float8_ b, Float8_ c) {
   return d;
 }
 
-// Vector sum.
+// 向量求和。
 template<>
 inline __device__ float sum(float v) {
   return v;
@@ -207,7 +205,7 @@ inline __device__ float sum(Float8_ v) {
   return v.x.x + v.x.y + v.y.x + v.y.y + v.z.x + v.z.y + v.w.x + v.w.y;
 }
 
-// Vector dot product.
+// 向量点积。
 inline __device__ float dot(float a, float b) {
   return a * b;
 }
@@ -231,7 +229,7 @@ inline __device__ float dot(Float8_ a, Float8_ b) {
   return acc.x + acc.y;
 }
 
-// From float to float.
+// 从 float 到 float。
 inline __device__ void from_float(float& dst, float src) {
   dst = src;
 }
@@ -244,7 +242,7 @@ inline __device__ void from_float(float4& dst, float4 src) {
   dst = src;
 }
 
-// From float to float.
+// 从 float 到 float。
 inline __device__ float to_float(float u) {
   return u;
 }

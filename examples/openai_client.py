@@ -1,23 +1,23 @@
 import openai
 
-# Modify OpenAI's API key and API base to use vLLM's API server.
+# 修改OpenAI的API密钥和API基础URL以使用vLLM的API服务器。
 openai.api_key = "EMPTY"
 openai.api_base = "http://localhost:8000/v1"
 model = "facebook/opt-125m"
 
-# Test list models API
+# 测试列出模型API
 models = openai.Model.list()
-print("Models:", models)
+print("模型:", models)
 
-# Test completion API
+# 测试补全API
 stream = True
 completion = openai.Completion.create(
     model=model, prompt="A robot may not injure a human being", echo=False, n=2,
     best_of=3, stream=stream, logprobs=3)
 
-# print the completion
+# 打印补全结果
 if stream:
     for c in completion:
         print(c)
 else:
-    print("Completion result:", completion)
+    print("补全结果:", completion)

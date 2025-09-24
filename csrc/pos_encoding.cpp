@@ -11,5 +11,5 @@ PYBIND11_MODULE(TORCH_EXTENSION_NAME, m) {
   m.def(
     "rotary_embedding_neox",
     &rotary_embedding_neox,
-    "Apply GPT-NeoX style rotary embedding to query and key");
+    "对查询和键应用GPT-NeoX风格的旋转嵌入");
 }

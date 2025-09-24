@@ -187,7 +187,7 @@ class SequenceGroup:
         for seq in self.seqs:
             if seq.seq_id == seq_id:
                 return seq
-        raise ValueError(f'Sequence {seq_id} not found.')
+        raise ValueError(f'序列 {seq_id} 未找到。')
 
     def is_finished(self) -> bool:
         return all(seq.is_finished() for seq in self.seqs)

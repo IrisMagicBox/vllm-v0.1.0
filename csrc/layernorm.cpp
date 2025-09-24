@@ -10,5 +10,5 @@ PYBIND11_MODULE(TORCH_EXTENSION_NAME, m) {
   m.def(
     "rms_norm",
     &rms_norm,
-    "Apply Root Mean Square (RMS) Normalization to the input tensor.");
+    "对输入张量应用均方根(RMS)归一化。");
 }

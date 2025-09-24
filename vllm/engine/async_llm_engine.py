@@ -15,25 +15,21 @@ TIMEOUT_TO_PREVENT_DEADLOCK = 1 # seconds
 
 
 class AsyncLLMEngine:
-    """An asynchronous wrapper for LLMEngine.
+    """LLMEngine 的异步包装器。
 
-    This class is used to wrap the LLMEngine class to make it asynchronous. It
-    uses asyncio to create a background loop that keeps processing incoming
-    requests. The LLMEngine is kicked by the generate method when there
-    are requests in the waiting queue. The generate method yields the outputs
-    from the LLMEngine to the caller.
+    此类用于包装 LLMEngine 类以使其异步化。它使用 asyncio 创建一个后台循环，
+    持续处理传入的请求。当等待队列中有请求时，generate 方法会触发 LLMEngine。
+    generate 方法将输出从 LLMEngine 生成给调用者。
 
-    NOTE: For the comprehensive list of arguments, see `LLMEngine`.
+    注意：有关参数的完整列表，请参见 `LLMEngine`。
 
     Args:
-        worker_use_ray: Whether to use Ray for model workers. Required for
-            distributed execution. Should be the same as
-            `parallel_config.worker_use_ray`.
-        engine_use_ray: Whether to make LLMEngine a Ray actor. If so, the
-            async frontend will be executed in a separate process as the
-            model workers.
-        log_requests: Whether to log the requests.
-        *args, *kwargs: Arguments for LLMEngine.
+        worker_use_ray: 是否对模型工作进程使用 Ray。分布式执行时必需。
+            应与 `parallel_config.worker_use_ray` 相同。
+        engine_use_ray: 是否将 LLMEngine 作为一个 Ray actor。如果是这样，
+            异步前端将在一个单独的进程中执行，作为模型工作进程。
+        log_requests: 是否记录请求日志。
+        *args, *kwargs: LLMEngine 的参数。
     """
     def __init__(self, worker_use_ray: bool, engine_use_ray: bool,
                  log_requests: bool = True, *args, **kwargs) -> None:
@@ -47,29 +43,28 @@ class AsyncLLMEngine:
         else:
             engine_class = ray.remote(num_gpus=1)(LLMEngine).remote
         self.engine = engine_class(*args, **kwargs)
-        # Request id -> request output.
+        # 请求 ID -> 请求输出。
         self.request_outputs: Dict[str, RequestOutput] = {}
-        # Request id -> event to notify that there is new output.
+        # 请求 ID -> 通知有新输出的事件。
         self.request_events: Dict[str, asyncio.Event] = {}
         self.is_engine_running = False
         self.kicking_request_id: Optional[str] = None
 
     async def engine_step(self, kicking_request_id: Optional[str] = None):
-        """Kick the engine to process the waiting requests."""
+        """触发引擎处理等待的请求。"""
         self.is_engine_running = True
         self.kicking_request_id = kicking_request_id
         if self.engine_use_ray:
             request_outputs = await self.engine.step.remote()
         else:
-            # Yield to the event loop to allow other coroutines to run
-            # while is_engine_running is True. This let the engine to add new
-            # requests into the queue.
+            # 让出事件循环以允许其他协程运行
+            # 当 is_engine_running 为 True 时。这允许引擎将新请求添加到队列中。
             await asyncio.sleep(0)
             request_outputs = self.engine.step()
         self.is_engine_running = False
         self.kicking_request_id = None
 
-        # Notify the waiting coroutines that there are new outputs ready.
+        # 通知等待的协程有新输出已就绪。
         for request_output in request_outputs:
             request_id = request_output.request_id
             self.request_outputs[request_id] = request_output
@@ -82,39 +77,35 @@ class AsyncLLMEngine:
         request_id: str,
         prompt_token_ids: Optional[List[int]] = None
     ) -> RequestOutput:
-        """Generate outputs for a request.
+        """为请求生成输出。
 
-        Generate outputs for a request. This method is a coroutine. It adds the
-        request into the waiting queue of the LLMEngine and streams the outputs
-        from the LLMEngine to the caller.
+        为请求生成输出。此方法是一个协程。它将请求添加到 LLMEngine 的等待队列中，
+        并将输出从 LLMEngine 流式传输给调用者。
 
         Args:
-            prompt: The prompt string. Can be None if prompt_token_ids is
-                provided.
-            sampling_params: The sampling parameters of the request.
-            request_id: The unique id of the request.
-            prompt_token_ids: The token IDs of the prompt. If None, we
-                use the tokenizer to convert the prompts to token IDs.
+            prompt: 提示字符串。如果提供了 prompt_token_ids，则可以为 None。
+            sampling_params: 请求的采样参数。
+            request_id: 请求的唯一 ID。
+            prompt_token_ids: 提示的令牌 ID。如果为 None，我们使用
+                分词器将提示转换为令牌 ID。
 
         Yields:
-            The output `RequestOutput` objects from the LLMEngine for the
-            request.
+            LLMEngine 为请求生成的输出 `RequestOutput` 对象。
         """
-        # Preprocess the request.
+        # 预处理请求。
         arrival_time = time.time()
 
-        # Create an event to notify us that there is new output from the
-        # vLLM engine.
+        # 创建一个事件来通知我们 vLLM 引擎有新输出。
         request_event = asyncio.Event()
         self.request_events[request_id] = request_event
 
         if self.log_requests:
-            logger.info(f"Received request {request_id}: "
-                        f"prompt: {prompt!r}, "
-                        f"sampling params: {sampling_params}, "
-                        f"prompt token ids: {prompt_token_ids}.")
+            logger.info(f"收到请求 {request_id}: "
+                        f"提示: {prompt!r}, "
+                        f"采样参数: {sampling_params}, "
+                        f"提示令牌 ID: {prompt_token_ids}.")
 
-        # Add the request into the vLLM engine's waiting queue.
+        # 将请求添加到 vLLM 引擎的等待队列中。
         if self.engine_use_ray:
             await self.engine.add_request.remote(
                 request_id, prompt, sampling_params,
@@ -126,62 +117,58 @@ class AsyncLLMEngine:
                 prompt_token_ids=prompt_token_ids,
                 arrival_time=arrival_time)
 
-        # The vLLM engine does not have a background loop that keeps
-        # processing incoming requests. Therefore, we need to keep kicking
-        # the engine to process the requests.
+        # vLLM 引擎没有后台循环来持续处理传入请求。
+        # 因此，我们需要不断触发引擎来处理请求。
         while True:
             if request_id not in self.request_events:
-                # The request has been aborted.
+                # 请求已被中止。
                 return
 
-            # Kick the engine if the engine is not running.
+            # 如果引擎未运行，则触发引擎。
             if not self.is_engine_running:
                 await self.engine_step(request_id)
 
-            # Wait for new output. The group_event will be set in engine_step
-            # when there is new output available for the sequence group.
-            # Added a timeout to prevent deadlock.
+            # 等待新输出。当序列组有可用输出时，group_event 将在 engine_step 中设置。
+            # 添加了超时以防止死锁。
             try:
                 await asyncio.wait_for(request_event.wait(),
                                        timeout=TIMEOUT_TO_PREVENT_DEADLOCK)
             except asyncio.TimeoutError:
                 continue
-            # Reset the event to wait for the next output.
+            # 重置事件以等待下一个输出。
             request_event.clear()
 
-            # Decode and return new outputs.
+            # 解码并返回新输出。
             request_output = self.request_outputs[request_id]
             yield request_output
 
-            # Once finished, release the resources of the sequence group.
+            # 完成后，释放序列组的资源。
             if request_output.finished():
                 if self.log_requests:
-                    logger.info(f"Finished request {request_id}.")
+                    logger.info(f"完成请求 {request_id}.")
 
                 del self.request_outputs[request_id]
                 del self.request_events[request_id]
-                # Kick the engine if the engine is not running. This is to
-                # prevent that there are still requests in engine's waiting
-                # queue to be executed.
+                # 如果引擎未运行，则触发引擎。这是为了防止引擎等待队列中
+                # 仍有待执行的请求。
                 if not self.is_engine_running:
                     await self.engine_step()
                 break
 
     async def abort(self, request_id: str) -> None:
-        """Abort a request.
+        """中止一个请求。
 
-        Abort a submitted request. If the request is finished or not found,
-        this method will be a no-op.
+        中止提交的请求。如果请求已完成或找不到，则此方法将不执行任何操作。
 
         Args:
-            request_id: The unique id of the request.
+            request_id: 请求的唯一 ID。
         """
         if request_id not in self.request_events:
-            # The request has already finished or been aborted.
+            # 请求已经完成或已被中止。
             return
 
         if self.log_requests:
-            logger.info(f"Aborted request {request_id}.")
+            logger.info(f"中止请求 {request_id}.")
 
         if self.engine_use_ray:
             await self.engine.abort_request.remote(request_id)
@@ -193,22 +180,21 @@ class AsyncLLMEngine:
         if request_id in self.request_outputs:
             del self.request_outputs[request_id]
 
-        # To prevent deadlock when a request is aborted while the engine is
-        # running.
+        # 为防止在引擎运行时中止请求导致死锁。
         if self.kicking_request_id == request_id:
             self.is_engine_running = False
             self.kicking_request_id = None
 
     @classmethod
     def from_engine_args(cls, engine_args: AsyncEngineArgs) -> "AsyncLLMEngine":
-        """Creates an async LLM engine from the engine arguments."""
-        # Create the engine configs.
+        """根据引擎参数创建异步 LLM 引擎。"""
+        # 创建引擎配置。
         engine_configs = engine_args.create_engine_configs()
         parallel_config = engine_configs[2]
-        # Initialize the cluster.
+        # 初始化集群。
         distributed_init_method, devices = initialize_cluster(
             parallel_config, engine_args.engine_use_ray)
-        # Create the async LLM engine.
+        # 创建异步 LLM 引擎。
         engine = cls(engine_args.worker_use_ray,
                      engine_args.engine_use_ray,
                      not engine_args.disable_log_requests,

@@ -4,17 +4,15 @@ from vllm.sequence import SequenceGroup, SequenceStatus
 
 
 class CompletionOutput:
-    """The output data of one completion output of a request.
+    """一个请求的一个完成输出的数据。
 
     Args:
-        index: The index of the output in the request.
-        text: The generated output text.
-        token_ids: The token IDs of the generated output text.
-        cumulative_logprob: The cumulative log probability of the generated
-            output text.
-        logprobs: The log probabilities of the top probability words at each
-            position if the logprobs are requested.
-        finish_reason: The reason why the sequence is finished.
+        index: 请求中输出的索引。
+        text: 生成的输出文本。
+        token_ids: 生成的输出文本的token ID。
+        cumulative_logprob: 生成的输出文本的累积对数概率。
+        logprobs: 如果请求了logprobs，则为每个位置的最高概率词的对数概率。
+        finish_reason: 序列完成的原因。
     """
 
     def __init__(
@@ -46,13 +44,13 @@ class CompletionOutput:
 
 
 class RequestOutput:
-    """The output data of a request to the LLM.
+    """LLM请求的输出数据。
 
     Args:
-        request_id: The unique ID of the request.
-        prompt: The prompt string of the request.
-        prompt_token_ids: The token IDs of the prompt.
-        outputs: The output sequences of the request.
+        request_id: 请求的唯一ID。
+        prompt: 请求的提示字符串。
+        prompt_token_ids: 提示的token ID。
+        outputs: 请求的输出序列。
     """
     def __init__(
         self,
@@ -68,7 +66,7 @@ class RequestOutput:
 
     @classmethod
     def from_seq_group(cls, seq_group: SequenceGroup) -> "RequestOutput":
-        # Get the top-n sequences.
+        # 获取top-n序列。
         n = seq_group.sampling_params.n
         seqs = seq_group.get_seqs()
         assert n <= len(seqs)
@@ -76,14 +74,14 @@ class RequestOutput:
             seqs, key=lambda seq: seq.get_cumulative_logprob(), reverse=True)
         top_n_seqs = sorted_seqs[:n]
 
-        # Create the outputs.
+        # 创建输出。
         outputs: List[CompletionOutput] = []
         for seq in top_n_seqs:
             logprobs = seq.output_logprobs
             if seq_group.sampling_params.logprobs is None:
-                # NOTE: We need to take care of this case because the sequence
-                # always has the logprobs of the sampled tokens even if the
-                # logprobs are not requested.
+                # NOTE: 我们需要留意这种情况，因为序列
+                # 总是具有采样token的logprobs，即使
+                # 没有请求logprobs。
                 logprobs = {}
             finshed_reason = SequenceStatus.get_finished_reason(seq.status)
             output = CompletionOutput(seqs.index(seq), seq.output_text,
@@ -92,7 +90,7 @@ class RequestOutput:
                                       finshed_reason)
             outputs.append(output)
 
-        # Every sequence in the sequence group should have the same prompt.
+        # 序列组中的每个序列都应该具有相同的提示。
         prompt = top_n_seqs[0].prompt
         prompt_token_ids = top_n_seqs[0].data.prompt_token_ids
         return cls(seq_group.request_id, prompt, prompt_token_ids, outputs)

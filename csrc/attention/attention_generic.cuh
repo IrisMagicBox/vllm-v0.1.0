@@ -1,19 +1,17 @@
 /*
- * Adapted from https://github.com/NVIDIA/FasterTransformer/blob/release/v5.3_tag/src/fastertransformer/kernels/decoder_masked_multihead_attention_utils.h
- * Copyright (c) 2023, The vLLM team.
- * Copyright (c) 2020-2023, NVIDIA CORPORATION.  All rights reserved.
+ * 改编自 https://github.com/NVIDIA/FasterTransformer/blob/release/v5.3_tag/src/fastertransformer/kernels/decoder_masked_multihead_attention_utils.h
+ * 版权所有 (c) 2023, vLLM 团队。
+ * 版权所有 (c) 2020-2023, NVIDIA CORPORATION。保留所有权利。
  *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
+ * 根据 Apache 许可证 2.0 版（"许可证"）进行许可；
+ * 除了遵守许可证外，不得使用此文件。
+ * 您可以在以下位置获得许可证副本：
  *
  *     http://www.apache.org/licenses/LICENSE-2.0
  *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
+ * 除非适用法律要求或书面同意，根据许可证分发的软件
+ * 按"现状"分发，不附带任何明示或暗示的担保条件。
+ * 有关许可证下权限和限制的具体语言，请参见许可证。
  */
 #pragma once
 
@@ -21,15 +19,15 @@
 
 namespace vllm {
 
-// A vector type to store Q, K, V elements.
+// 用于存储 Q、K、V 元素的向量类型。
 template<typename T, int VEC_SIZE>
 struct Vec {};
 
-// A vector type to store FP32 accumulators.
+// 用于存储 FP32 累加器的向量类型。
 template<typename T>
 struct FloatVec {};
 
-// Template vector operations.
+// 模板向量操作。
 template<typename Acc, typename A, typename B>
 inline __device__ Acc mul(A a, B b);
 

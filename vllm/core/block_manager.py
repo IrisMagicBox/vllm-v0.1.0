@@ -1,4 +1,4 @@
-"""A block manager that manages token blocks."""
+"""管理 token 块的块管理器。"""
 from typing import Dict, List, Optional, Set, Tuple
 
 from vllm.block import PhysicalTokenBlock
@@ -7,11 +7,10 @@ from vllm.utils import Device
 
 
 class BlockAllocator:
-    """Manages free physical token blocks for a device.
+    """管理设备的空闲物理 token 块。
 
-    The allocator maintains a list of free blocks and allocates a block when
-    requested. When a block is freed, its reference count is decremented. If
-    the reference count becomes zero, the block is added back to the free list.
+    分配器维护一个空闲块列表，并在请求时分配一个块。
+    当一个块被释放时，其引用计数将减少。如果引用计数变为零，则将该块添加回空闲列表。
     """
 
     def __init__(
@@ -24,7 +23,7 @@ class BlockAllocator:
         self.block_size = block_size
         self.num_blocks = num_blocks
 
-        # Initialize the free blocks.
+        # 初始化空闲块。
         self.free_blocks: List[PhysicalTokenBlock] = []
         for i in range(num_blocks):
             block = PhysicalTokenBlock(
@@ -33,14 +32,14 @@ class BlockAllocator:
 
     def allocate(self) -> PhysicalTokenBlock:
         if not self.free_blocks:
-            raise ValueError("Out of memory! No free blocks are available.")
+            raise ValueError("内存不足！没有可用的空闲块。")
         block = self.free_blocks.pop()
         block.ref_count = 1
         return block
 
     def free(self, block: PhysicalTokenBlock) -> None:
         if block.ref_count == 0:
-            raise ValueError(f"Double free! {block} is already freed.")
+            raise ValueError(f"重复释放！{block} 已经被释放。")
         block.ref_count -= 1
         if block.ref_count == 0:
             self.free_blocks.append(block)
@@ -49,12 +48,12 @@ class BlockAllocator:
         return len(self.free_blocks)
 
 
-# Mapping: logical block number -> physical block.
+# 映射：逻辑块号 -> 物理块。
 BlockTable = List[PhysicalTokenBlock]
 
 
 class BlockSpaceManager:
-    """Manages the mapping between logical and physical token blocks."""
+    """管理逻辑和物理 token 块之间的映射。"""
 
     def __init__(
         self,
@@ -74,78 +73,78 @@ class BlockSpaceManager:
                                             num_gpu_blocks)
         self.cpu_allocator = BlockAllocator(Device.CPU, block_size,
                                             num_cpu_blocks)
-        # Mapping: seq_id -> BlockTable.
+        # 映射：seq_id -> BlockTable。
         self.block_tables: Dict[int, BlockTable] = {}
 
     def can_allocate(self, seq_group: SequenceGroup) -> bool:
-        # FIXME(woosuk): Here we assume that all sequences in the group share
-        # the same prompt. This may not be true for preempted sequences.
+        # FIXME(woosuk): 这里我们假设组中的所有序列共享
+        # 相同的提示。对于被抢占的序列，这可能不成立。
         seq = seq_group.get_seqs()[0]
         num_required_blocks = len(seq.logical_token_blocks)
         num_free_gpu_blocks = self.gpu_allocator.get_num_free_blocks()
-        # Use watermark to avoid frequent cache eviction.
+        # 使用水印来避免频繁的缓存逐出。
         return num_free_gpu_blocks - num_required_blocks >= self.watermark_blocks
 
     def allocate(self, seq_group: SequenceGroup) -> None:
-        # NOTE: Here we assume that all sequences in the group have the same prompt.
+        # NOTE: 这里我们假设组中的所有序列具有相同的提示。
         seq = seq_group.get_seqs()[0]
 
-        # Allocate new physical token blocks that will store the prompt tokens.
+        # 分配存储提示 token 的新物理 token 块。
         block_table: BlockTable = []
         for _ in range(len(seq.logical_token_blocks)):
             block = self.gpu_allocator.allocate()
-            # Set the reference counts of the token blocks.
+            # 设置 token 块的引用计数。
             block.ref_count = seq_group.num_seqs()
             block_table.append(block)
 
-        # Assign the block table for each sequence.
+        # 为每个序列分配块表。
         for seq in seq_group.get_seqs():
             self.block_tables[seq.seq_id] = block_table.copy()
 
     def can_append_slot(self, seq_group: SequenceGroup) -> bool:
-        # Simple heuristic: If there is at least one free block
-        # for each sequence, we can append.
+        # 简单启发式：如果每个序列至少有一个空闲块，
+        # 我们可以追加。
         num_free_gpu_blocks = self.gpu_allocator.get_num_free_blocks()
         num_seqs = seq_group.num_seqs(status=SequenceStatus.RUNNING)
         return num_seqs <= num_free_gpu_blocks
 
     def append_slot(self, seq: Sequence) -> Optional[Tuple[int, int]]:
-        """Allocate a physical slot for a new token."""
+        """为新 token 分配物理槽位。"""
         logical_blocks = seq.logical_token_blocks
         block_table = self.block_tables[seq.seq_id]
 
         if len(block_table) < len(logical_blocks):
-            # The sequence has a new logical block.
-            # Allocate a new physical block.
+            # 该序列有一个新的逻辑块。
+            # 分配一个新的物理块。
             block = self.gpu_allocator.allocate()
             block_table.append(block)
             return None
 
-        # We want to append the token to the last physical block.
+        # 我们想将 token 添加到上一个物理块。
         last_block = block_table[-1]
         assert last_block.device == Device.GPU
         if last_block.ref_count == 1:
-            # Not shared with other sequences. Appendable.
+            # 不与其他序列共享。可附加。
             return None
         else:
-            # The last block is shared with other sequences.
-            # Copy on Write: Allocate a new block and copy the tokens.
+            # 上一个块与其他序列共享。
+            # 写时复制：分配一个新块并复制 token。
             new_block = self.gpu_allocator.allocate()
             block_table[-1] = new_block
             self.gpu_allocator.free(last_block)
             return last_block.block_number, new_block.block_number
 
     def fork(self, parent_seq: Sequence, child_seq: Sequence) -> None:
-        # NOTE: fork does not allocate a new physical block.
-        # Thus, it is always safe from OOM.
+        # NOTE: fork 不分配新的物理块。
+        # 因此，它总是不会出现内存不足。
         src_block_table = self.block_tables[parent_seq.seq_id]
         self.block_tables[child_seq.seq_id] = src_block_table.copy()
         for block in src_block_table:
             block.ref_count += 1
 
     def _get_physical_blocks(self, seq_group: SequenceGroup) -> List[PhysicalTokenBlock]:
-        # NOTE: Here, we assume that the physical blocks are only shared by
-        # the sequences in the same group.
+        # NOTE: 这里，我们假设物理块仅由
+        # 相同组中的序列共享。
         blocks: Set[PhysicalTokenBlock] = set()
         for seq in seq_group.get_seqs():
             if seq.is_finished():
@@ -159,14 +158,14 @@ class BlockSpaceManager:
         blocks = self._get_physical_blocks(seq_group)
         num_swapped_seqs = seq_group.num_seqs(status=SequenceStatus.SWAPPED)
         num_free_blocks = self.gpu_allocator.get_num_free_blocks()
-        # NOTE: Conservatively, we assume that every sequence will allocate
-        # at least one free block right after the swap-in.
-        # NOTE: This should match the logic in can_append_slot().
+        # NOTE: 保守地，我们假设每个序列将在
+        # 交换进来后立即分配至少一个空闲块。
+        # NOTE: 这应该与 can_append_slot() 中的逻辑匹配。
         num_required_blocks = len(blocks) + num_swapped_seqs
         return num_free_blocks - num_required_blocks >= self.watermark_blocks
 
     def swap_in(self, seq_group: SequenceGroup) -> Dict[int, int]:
-        # CPU block -> GPU block.
+        # CPU 块 -> GPU 块。
         mapping: Dict[PhysicalTokenBlock, PhysicalTokenBlock] = {}
         for seq in seq_group.get_seqs():
             if seq.is_finished():
@@ -182,7 +181,7 @@ class BlockSpaceManager:
                     gpu_block = self.gpu_allocator.allocate()
                     mapping[cpu_block] = gpu_block
                 new_block_table.append(gpu_block)
-                # Free the CPU block swapped in to GPU.
+                # 释放交换到 GPU 的 CPU 块。
                 self.cpu_allocator.free(cpu_block)
             self.block_tables[seq.seq_id] = new_block_table
 
@@ -197,7 +196,7 @@ class BlockSpaceManager:
         return len(blocks) <= self.cpu_allocator.get_num_free_blocks()
 
     def swap_out(self, seq_group: SequenceGroup) -> Dict[int, int]:
-        # GPU block -> CPU block.
+        # GPU 块 -> CPU 块。
         mapping: Dict[PhysicalTokenBlock, PhysicalTokenBlock] = {}
         for seq in seq_group.get_seqs():
             if seq.is_finished():
@@ -213,7 +212,7 @@ class BlockSpaceManager:
                     cpu_block = self.cpu_allocator.allocate()
                     mapping[gpu_block] = cpu_block
                 new_block_table.append(cpu_block)
-                # Free the GPU block swapped out to CPU.
+                # 释放交换到 CPU 的 GPU 块。
                 self.gpu_allocator.free(gpu_block)
             self.block_tables[seq.seq_id] = new_block_table
 
@@ -232,7 +231,7 @@ class BlockSpaceManager:
 
     def free(self, seq: Sequence) -> None:
         if seq.seq_id not in self.block_tables:
-            # Already freed or haven't been scheduled yet.
+            # 已经被释放或尚未被调度。
             return
         block_table = self.block_tables[seq.seq_id]
         self._free_block_table(block_table)

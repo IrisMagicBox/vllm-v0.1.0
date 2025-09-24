@@ -1,4 +1,4 @@
-"""Benchmark the latency of processing a single batch of requests."""
+"""基准测试处理单个请求批次的延迟。"""
 import argparse
 import time
 
@@ -12,9 +12,9 @@ from vllm import LLM, SamplingParams
 def main(args: argparse.Namespace):
     print(args)
 
-    # Process all the requests in a single batch if possible.
-    # NOTE(woosuk): If the request cannot be processed in a single batch,
-    # the engine will automatically process the request in multiple batches.
+    # 尽可能在单个批次中处理所有请求。
+    # 注意(woosuk): 如果请求无法在单个批次中处理，
+    # 引擎将自动在多个批次中处理请求。
     llm = LLM(
         model=args.model,
         tensor_parallel_size=args.tensor_parallel_size,
@@ -48,29 +48,28 @@ def main(args: argparse.Namespace):
             torch.cuda.cudart().cudaProfilerStop()
         return latency
 
-    print("Warming up...")
+    print("预热中...")
     run_to_completion(profile=False)
 
-    # Benchmark.
+    # 基准测试。
     latencies = []
-    for _ in tqdm(range(args.num_iters), desc="Profiling iterations"):
+    for _ in tqdm(range(args.num_iters), desc="性能分析迭代"):
         latencies.append(run_to_completion(profile=False))
-    print(f'Avg latency: {np.mean(latencies)} seconds')
+    print(f'平均延迟: {np.mean(latencies)} 秒')
 
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(
-        description='Benchmark the latency of processing a single batch of '
-                    'requests till completion.')
+        description='基准测试处理单个请求批次直到完成的延迟。')
     parser.add_argument('--model', type=str, default='facebook/opt-125m')
     parser.add_argument('--tensor-parallel-size', '-tp', type=int, default=1)
     parser.add_argument('--input-len', type=int, default=32)
     parser.add_argument('--output-len', type=int, default=128)
     parser.add_argument('--batch-size', type=int, default=8)
     parser.add_argument('--n', type=int, default=1,
-                        help='Number of generated sequences per prompt.')
+                        help='每个提示生成的序列数。')
     parser.add_argument('--use-beam-search', action='store_true')
     parser.add_argument('--num-iters', type=int, default=3,
-                        help='Number of iterations to run.')
+                        help='运行的迭代次数。')
     args = parser.parse_args()
     main(args)

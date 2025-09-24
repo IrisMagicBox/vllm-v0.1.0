@@ -1,4 +1,4 @@
-"""CacheEngine class for managing the KV cache."""
+"""用于管理KV缓存的CacheEngine类。"""
 from typing import Dict, List, Tuple
 
 import torch
@@ -10,11 +10,10 @@ KVCache = Tuple[torch.Tensor, torch.Tensor]
 
 
 class CacheEngine:
-    """Manages the KV cache.
+    """管理KV缓存。
 
-    This class is responsible for initializing and managing the GPU and CPU KV
-    caches. It also provides methods for performing KV cache operations, such
-    as swapping and copying.
+    该类负责初始化和管理GPU和CPU的KV缓存。
+    它还提供执行KV缓存操作的方法，如交换和复制。
     """
 
     def __init__(
@@ -36,14 +35,14 @@ class CacheEngine:
         self.num_gpu_blocks = cache_config.num_gpu_blocks
         self.num_cpu_blocks = cache_config.num_cpu_blocks
 
-        # Initialize the cache.
+        # 初始化缓存。
         self.gpu_cache = self.allocate_gpu_cache()
         self.cpu_cache = self.allocate_cpu_cache()
 
-        # Initialize the stream for caching operations.
+        # 初始化缓存操作的流。
         self.cache_stream = torch.cuda.Stream()
         assert self.cache_stream != torch.cuda.current_stream()
-        # Initialize the events for stream synchronization.
+        # 初始化流同步事件。
         self.events = [torch.cuda.Event() for _ in range(self.num_layers)]
 
     def get_key_block_shape(self) -> Tuple[int, int, int, int]:
@@ -109,10 +108,10 @@ class CacheEngine:
             for i in range(self.num_layers):
                 src_key_cache, src_value_cache = src[i]
                 dst_key_cache, dst_value_cache = dst[i]
-                # Copy the key blocks.
+                # 复制键块。
                 cache_ops.swap_blocks(
                     src_key_cache, dst_key_cache, src_to_dst)
-                # Copy the value blocks.
+                # 复制值块。
                 cache_ops.swap_blocks(
                     src_value_cache, dst_value_cache, src_to_dst)
                 event = self.events[i]
@@ -127,7 +126,7 @@ class CacheEngine:
     def copy(self, src_to_dsts: Dict[int, List[int]]) -> None:
         key_caches = [key_cache for key_cache, _ in self.gpu_cache]
         value_caches = [value_cache for _, value_cache in self.gpu_cache]
-        # NOTE(woosuk): This operation implicitly synchronizes the CPU and GPU.
+        # 注意(woosuk): 此操作隐式同步CPU和GPU。
         cache_ops.copy_blocks(key_caches, value_caches, src_to_dsts)
 
     @staticmethod

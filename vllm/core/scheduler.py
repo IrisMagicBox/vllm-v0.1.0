@@ -16,13 +16,12 @@ _LOGGING_INTERVAL_SEC = 5
 
 
 class PreemptionMode(enum.Enum):
-    """Preemption modes.
+    """抢占模式。
 
-    1. Swapping: Swap out the blocks of the preempted sequences to CPU memory
-    and swap them back in when the sequences are resumed.
-    2. Recomputation: Discard the blocks of the preempted sequences and
-    recompute them when the sequences are resumed, treating the sequences as
-    new prompts.
+    1. 交换：将被抢占序列的块交换到 CPU 内存中，
+    当序列恢复时再交换回来。
+    2. 重新计算：丢弃被抢占序列的块，
+    当序列恢复时重新计算它们，将序列视为新的提示。
     """
     SWAP = enum.auto()
     RECOMPUTE = enum.auto()
@@ -39,7 +38,7 @@ class SchedulerOutputs:
         self.blocks_to_swap_in = blocks_to_swap_in
         self.blocks_to_swap_out = blocks_to_swap_out
         self.blocks_to_copy = blocks_to_copy
-        # Swap in and swap out should never happen at the same time.
+        # 交换进和交换出不应同时发生。
         assert not (blocks_to_swap_in and blocks_to_swap_out)
 
     def is_empty(self) -> bool:
@@ -60,35 +59,35 @@ class Scheduler:
         self.cache_config = cache_config
         self.log_stats = log_stats
 
-        # Instantiate the scheduling policy.
+        # 实例化调度策略。
         self.policy = PolicyFactory.get_policy(policy_name='fcfs')
-        # Create the block space manager.
+        # 创建块空间管理器。
         self.block_manager = BlockSpaceManager(
             block_size=self.cache_config.block_size,
             num_gpu_blocks=self.cache_config.num_gpu_blocks,
             num_cpu_blocks=self.cache_config.num_cpu_blocks,
         )
 
-        # Sequence groups in the WAITING state.
+        # WAITING 状态的序列组。
         self.waiting: List[SequenceGroup] = []
-        # Sequence groups in the RUNNING state.
+        # RUNNING 状态的序列组。
         self.running: List[SequenceGroup] = []
-        # Sequence groups in the SWAPPED state.
+        # SWAPPED 状态的序列组。
         self.swapped: List[SequenceGroup] = []
 
         self.last_logging_time: float = 0.0
-        # List[timestamp, num_tokens]
+        # List[时间戳, token数量]
         self.num_input_tokens: List[Tuple[float, int]] = []
 
     def add_seq_group(self, seq_group: SequenceGroup) -> None:
-        # Add sequence groups to the waiting queue.
+        # 将序列组添加到等待队列。
         self.waiting.append(seq_group)
 
     def abort_seq_group(self, request_id: str) -> None:
         for state_queue in [self.waiting, self.running, self.swapped]:
             for seq_group in state_queue:
                 if seq_group.request_id == request_id:
-                    # Remove the sequence group from the state queue.
+                    # 从状态队列中移除序列组。
                     state_queue.remove(seq_group)
                     for seq in seq_group.seqs:
                         if seq.is_finished():
@@ -103,58 +102,57 @@ class Scheduler:
         return len(self.waiting) + len(self.running) + len(self.swapped)
 
     def _schedule(self) -> Tuple[SchedulerOutputs, List[str]]:
-        # Blocks that need to be swaped or copied before model execution.
+        # 模型执行前需要交换或复制的块。
         blocks_to_swap_in: Dict[int, int] = {}
         blocks_to_swap_out: Dict[int, int] = {}
         blocks_to_copy: Dict[int, List[int]] = {}
 
-        # Fix the current time.
+        # 固定当前时间。
         now = time.time()
 
-        # NOTE(woosuk): We prioritize the sequence groups in the RUNNING state
-        # in order to minimize the preemption overheads.
-        # Preemption happens only when there is no available slot to keep all
-        # the sequence groups in the RUNNING state.
-        # In this case, the policy is responsible for deciding which sequence
-        # groups to preempt.
+        # NOTE(woosuk): 我们优先考虑 RUNNING 状态的序列组，
+        # 以最小化抢占开销。
+        # 仅当没有可用槽位来保持所有序列组处于 RUNNING 状态时，
+        # 才会发生抢占。
+        # 在这种情况下，策略负责决定抢占哪些序列组。
         self.running = self.policy.sort_by_priority(now, self.running)
 
-        # Reserve new token slots for the running sequence groups.
+        # 为正在运行的序列组保留新的 token 槽位。
         running: List[SequenceGroup] = []
         preempted: List[SequenceGroup] = []
         while self.running:
             seq_group = self.running.pop(0)
             while not self.block_manager.can_append_slot(seq_group):
                 if self.running:
-                    # Preempt the lowest-priority sequence groups.
+                    # 抢占最低优先级的序列组。
                     victim_seq_group = self.running.pop(-1)
                     self._preempt(victim_seq_group, blocks_to_swap_out)
                     preempted.append(victim_seq_group)
                 else:
-                    # No other sequence groups can be preempted.
-                    # Preempt the current sequence group.
+                    # 没有其他序列组可以被抢占。
+                    # 抢占当前序列组。
                     self._preempt(seq_group, blocks_to_swap_out)
                     preempted.append(seq_group)
                     break
             else:
-                # Append new slots to the sequence group.
+                # 向序列组追加新槽位。
                 self._append_slot(seq_group, blocks_to_copy)
                 running.append(seq_group)
         self.running = running
 
-        # Swap in the sequence groups in the SWAPPED state if possible.
+        # 如果可能，交换 SWAPPED 状态的序列组。
         self.swapped = self.policy.sort_by_priority(now, self.swapped)
         while self.swapped and not blocks_to_swap_out:
             seq_group = self.swapped[0]
-            # If the sequence group has been preempted in this step, stop.
+            # 如果序列组在此步骤中被抢占，则停止。
             if seq_group in preempted:
                 break
-            # If the sequence group cannot be swapped in, stop.
+            # 如果序列组无法交换进来，则停止。
             if not self.block_manager.can_swap_in(seq_group):
                 break
 
-            # The total number of sequences in the RUNNING state should not
-            # exceed the maximum number of sequences.
+            # RUNNING 状态的序列总数不应
+            # 超过最大序列数。
             num_new_seqs = seq_group.num_seqs(status=SequenceStatus.SWAPPED)
             num_curr_seqs = len(self.running)
             if num_curr_seqs + num_new_seqs > self.scheduler_config.max_num_seqs:
@@ -170,33 +168,32 @@ class Scheduler:
             for seq_group in self.running
         )
 
-        # Join waiting sequences if possible.
+        # 如果可能，加入等待序列。
         prompt_group_ids: List[str] = []
-        # NOTE(woosuk): The sequence groups in the SWAPPED state are strictly
-        # prioritized over the sequence groups in the WAITING state.
-        # This is because we want to bound the amount of CPU memory taken by
-        # the swapped sequence groups.
+        # NOTE(woosuk): SWAPPED 状态的序列组被严格
+        # 优先于 WAITING 状态的序列组。
+        # 这是因为我们希望限制被交换的序列组占用的 CPU 内存量。
         if not self.swapped:
-            # Optimization: We do not sort the waiting queue since the preempted
-            # sequence groups are added to the front and the new sequence groups
-            # are added to the back.
+            # 优化：我们不排序等待队列，因为被抢占的
+            # 序列组被添加到前面，新序列组
+            # 被添加到后面。
             while self.waiting:
                 seq_group = self.waiting[0]
-                # If the sequence group has been preempted in this step, stop.
+                # 如果序列组在此步骤中被抢占，则停止。
                 if seq_group in preempted:
                     break
-                # If the sequence group cannot be allocated, stop.
+                # 如果序列组无法分配，则停止。
                 if not self.block_manager.can_allocate(seq_group):
                     break
 
-                # If the number of batched tokens exceeds the limit, stop.
+                # 如果批处理 tokens 的数量超过限制，则停止。
                 num_prompt_tokens = seq_group.get_seqs()[0].get_len()
                 if (num_batched_tokens + num_prompt_tokens
                     > self.scheduler_config.max_num_batched_tokens):
                     break
 
-                # The total number of sequences in the RUNNING state should not
-                # exceed the maximum number of sequences.
+                # RUNNING 状态的序列总数不应
+                # 超过最大序列数。
                 num_new_seqs = seq_group.num_seqs(status=SequenceStatus.WAITING)
                 num_curr_seqs = len(self.running)
                 if num_curr_seqs + num_new_seqs > self.scheduler_config.max_num_seqs:
@@ -216,7 +213,7 @@ class Scheduler:
         if not self.log_stats:
             return scheduler_outputs, prompt_group_ids
 
-        # TODO(woosuk): Move the below code to the engine.
+        # TODO(woosuk): 将以下代码移到引擎中。
         now = time.time()
         if num_batched_tokens > 0:
             self.num_input_tokens.append((now, num_batched_tokens))
@@ -248,21 +245,21 @@ class Scheduler:
                 cpu_cache_usage = 0.0
 
             logger.info(
-                f"Throughput: {avg_throughput:.1f} tokens/s, "
-                f"Running: {len(self.running)} reqs, "
-                f"Swapped: {len(self.swapped)} reqs, "
-                f"Pending: {len(self.waiting)} reqs, "
-                f"GPU KV cache usage: {gpu_cache_usage * 100:.1f}%, "
-                f"CPU KV cache usage: {cpu_cache_usage * 100:.1f}%")
+                f"吞吐量: {avg_throughput:.1f} tokens/s, "
+                f"运行中: {len(self.running)} 个请求, "
+                f"已交换: {len(self.swapped)} 个请求, "
+                f"等待中: {len(self.waiting)} 个请求, "
+                f"GPU KV 缓存使用率: {gpu_cache_usage * 100:.1f}%, "
+                f"CPU KV 缓存使用率: {cpu_cache_usage * 100:.1f}%")
         return scheduler_outputs, prompt_group_ids
 
     def schedule(self) -> Tuple[List[SequenceGroupMetadata], SchedulerOutputs]:
-        # Schedule sequence groups.
-        # This function call changes the internal states of the scheduler
-        # such as self.running, self.swapped, and self.waiting.
+        # 调度序列组。
+        # 此函数调用会更改调度程序的内部状态，
+        # 例如 self.running、self.swapped 和 self.waiting。
         scheduler_outputs, prompt_group_ids = self._schedule()
 
-        # Create input data structures.
+        # 创建输入数据结构。
         seq_group_metadata_list: List[SequenceGroupMetadata] = []
         for seq_group in self.running:
             is_prompt = seq_group.request_id in prompt_group_ids
@@ -288,27 +285,27 @@ class Scheduler:
         self,
         seq_outputs: Dict[int, SequenceOutputs],
     ) -> List[SequenceGroup]:
-        # Update the running sequences and free blocks.
+        # 更新正在运行的序列并释放块。
         for seq_group in self.running:
-            # Process beam search results before processing the new tokens.
+            # 在处理新 token 之前处理束搜索结果。
             for seq in seq_group.get_seqs(status=SequenceStatus.RUNNING):
                 output = seq_outputs[seq.seq_id]
                 if seq.seq_id != output.parent_seq_id:
-                    # The sequence is a fork of the parent sequence (beam search).
-                    # Free the current sequence.
+                    # 该序列是父序列的分支（束搜索）。
+                    # 释放当前序列。
                     self.block_manager.free(seq)
-                    # Fork the parent sequence.
+                    # 分支父序列。
                     parent_seq = seq_group.find(output.parent_seq_id)
                     parent_seq.fork(seq)
                     self.block_manager.fork(parent_seq, seq)
 
-            # Process the new tokens.
+            # 处理新 token。
             for seq in seq_group.get_seqs(status=SequenceStatus.RUNNING):
-                # Append a new token to the sequence.
+                # 向序列追加新 token。
                 output = seq_outputs[seq.seq_id]
                 seq.append_token_id(output.output_token, output.logprobs)
-        # Return a shallow copy of the running queue to prevent the queue
-        # from being modified by the caller.
+        # 返回运行队列的浅拷贝，以防止队列
+        # 被调用者修改。
         return self.running.copy()
 
     def free_seq(self, seq: Sequence, finish_status: SequenceStatus) -> None:
@@ -346,17 +343,16 @@ class Scheduler:
         blocks_to_swap_out: Dict[int, int],
         preemption_mode: Optional[PreemptionMode] = None,
     ) -> None:
-        # If preemption mode is not specified, we determine the mode as follows:
-        # We use recomputation by default since it incurs lower overhead than
-        # swapping. However, when the sequence group has multiple sequences
-        # (e.g., beam search), recomputation is not supported. In such a case,
-        # we use swapping instead.
-        # FIXME(woosuk): This makes our scheduling policy a bit bizarre.
-        # As swapped sequences are prioritized over waiting sequences,
-        # sequence groups with multiple sequences are implicitly prioritized
-        # over sequence groups with a single sequence.
-        # TODO(woosuk): Support recomputation for sequence groups with multiple
-        # sequences. This may require a more sophisticated CUDA kernel.
+        # 如果未指定抢占模式，我们按如下方式确定模式：
+        # 我们默认使用重新计算，因为它比交换产生更低的开销。
+        # 但是，当序列组有多个序列
+        # （例如束搜索）时，不支持重新计算。在这种情况下，
+        # 我们改用交换。
+        # FIXME(woosuk): 这使我们的调度策略变得有些奇怪。
+        # 由于交换的序列优先于等待的序列，
+        # 多序列组隐式地优先于单序列组。
+        # TODO(woosuk): 支持多序列组的重新计算。
+        # 这可能需要更复杂的 CUDA 内核。
         if preemption_mode is None:
             seqs = seq_group.get_seqs(status=SequenceStatus.RUNNING)
             if len(seqs) == 1:
@@ -368,7 +364,7 @@ class Scheduler:
         elif preemption_mode == PreemptionMode.SWAP:
             self._preempt_by_swap(seq_group, blocks_to_swap_out)
         else:
-            assert False, 'Invalid preemption mode.'
+            assert False, '无效的抢占模式。'
 
     def _preempt_by_recompute(
         self,
@@ -379,8 +375,8 @@ class Scheduler:
         for seq in seqs:
             seq.status = SequenceStatus.WAITING
             self.block_manager.free(seq)
-        # NOTE: For FCFS, we insert the preempted sequence group to the front
-        # of the waiting queue.
+        # NOTE: 对于 FCFS，我们将被抢占的序列组插入到
+        # 等待队列的前面。
         self.waiting.insert(0, seq_group)
 
     def _preempt_by_swap(
@@ -410,11 +406,11 @@ class Scheduler:
         blocks_to_swap_out: Dict[int, int],
     ) -> None:
         if not self.block_manager.can_swap_out(seq_group):
-            # FIXME(woosuk): Abort the sequence group instead of aborting the
-            # entire engine.
+            # FIXME(woosuk): 中止序列组而不是中止
+            # 整个引擎。
             raise RuntimeError(
-                "Aborted due to the lack of CPU swap space. Please increase "
-                "the swap space to avoid this error.")
+                "由于缺乏 CPU 交换空间而中止。请增加 "
+                "交换空间以避免此错误。")
         mapping = self.block_manager.swap_out(seq_group)
         blocks_to_swap_out.update(mapping)
         for seq in seq_group.get_seqs(status=SequenceStatus.RUNNING):

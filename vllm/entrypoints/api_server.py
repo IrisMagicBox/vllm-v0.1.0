@@ -11,19 +11,19 @@ from vllm.engine.async_llm_engine import AsyncLLMEngine
 from vllm.sampling_params import SamplingParams
 from vllm.utils import random_uuid
 
-TIMEOUT_KEEP_ALIVE = 5 # seconds.
-TIMEOUT_TO_PREVENT_DEADLOCK = 1 # seconds
+TIMEOUT_KEEP_ALIVE = 5 # 秒
+TIMEOUT_TO_PREVENT_DEADLOCK = 1 # 秒
 app = FastAPI()
 
 
 @app.post("/generate")
 async def generate(request: Request) -> Response:
-    """Generate completion for the request.
+    """为请求生成补全。
 
-    The request should be a JSON object with the following fields:
-    - prompt: the prompt to use for the generation.
-    - stream: whether to stream the results or not.
-    - other fields: the sampling parameters (See `SamplingParams` for details).
+    请求应该是一个JSON对象，包含以下字段：
+    - prompt: 用于生成的提示。
+    - stream: 是否流式传输结果。
+    - 其他字段: 采样参数（详情参见 `SamplingParams`）。
     """
     request_dict = await request.json()
     prompt = request_dict.pop("prompt")
@@ -32,7 +32,7 @@ async def generate(request: Request) -> Response:
     request_id = random_uuid()
     results_generator = engine.generate(prompt, sampling_params, request_id)
 
-    # Streaming case
+    # 流式传输情况
     async def stream_results() -> AsyncGenerator[bytes, None]:
         async for request_output in results_generator:
             prompt = request_output.prompt
@@ -48,15 +48,15 @@ async def generate(request: Request) -> Response:
 
     if stream:
         background_tasks = BackgroundTasks()
-        # Abort the request if the client disconnects.
+        # 如果客户端断开连接则中止请求。
         background_tasks.add_task(abort_request)
         return StreamingResponse(stream_results(), background=background_tasks)
 
-    # Non-streaming case
+    # 非流式传输情况
     final_output = None
     async for request_output in results_generator:
         if await request.is_disconnected():
-            # Abort the request if the client disconnects.
+            # 如果客户端断开连接则中止请求。
             await engine.abort(request_id)
             return Response(status_code=499)
         final_output = request_output
@@ -73,8 +73,8 @@ async def generate(request: Request) -> Response:
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
-    parser.add_argument("--host", type=str, default="localhost")
-    parser.add_argument("--port", type=int, default=8000)
+    parser.add_argument("--host", type=str, default="localhost", help="主机名")
+    parser.add_argument("--port", type=int, default=8000, help="端口号")
     parser = AsyncEngineArgs.add_cli_args(parser)
     args = parser.parse_args()
 

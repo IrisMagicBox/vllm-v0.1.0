@@ -14,10 +14,10 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-"""Inference-only GPT-NeoX model compatible with HuggingFace weights.
+"""仅用于推理的与 HuggingFace 权重兼容的 GPT-NeoX 模型。
 
-The input of the model is flattened to a 1D tensor of tokens. The model uses
-InputMetadata to extract the original 2D shape of the input.
+模型的输入被展平为一维张量的令牌。模型使用 InputMetadata 
+来提取输入的原始二维形状。
 """
 from typing import Dict, List, Optional, Tuple
 
@@ -225,10 +225,9 @@ class GPTNeoXForCausalLM(nn.Module):
                 continue
             param = state_dict[name]
             if "query_key_value" in name:
-                # NOTE(woosuk): GPT-NeoX's fused QKV has the shape of
-                # [num_heads * 3 * head_size, hidden_size], while the
-                # required shape is [3 * num_heads * head_size, hidden_size].
-                # Thus, we need weight conversion.
+                # 注意(woosuk): GPT-NeoX 的融合 QKV 具有 [num_heads * 3 * head_size, hidden_size] 的形状，
+                # 而所需的形状是 [3 * num_heads * head_size, hidden_size]。
+                # 因此，我们需要权重转换。
                 shard_size = param.shape[0]
                 loaded_weight = loaded_weight[shard_size * tensor_model_parallel_rank
                                               :shard_size * (tensor_model_parallel_rank + 1)]
@@ -245,7 +244,7 @@ class GPTNeoXForCausalLM(nn.Module):
                     loaded_weight = loaded_weight.transpose(0, 1)
                     loaded_weight = loaded_weight.reshape(-1)
                 else:
-                    raise ValueError(f"Unexpected weight name: {name}")
+                    raise ValueError(f"意外的权重名称: {name}")
             load_tensor_parallel_weights(param, loaded_weight, name,
                                          self._column_parallel_weights,
                                          self._row_parallel_weights,

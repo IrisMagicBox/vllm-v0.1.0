@@ -1,4 +1,4 @@
-"""Utils for model executor."""
+"""模型执行器的工具."""
 import random
 
 import numpy as np

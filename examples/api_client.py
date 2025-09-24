@@ -1,4 +1,4 @@
-"""Example Python client for vllm.entrypoints.api_server"""
+"""vllm.entrypoints.api_server 的 Python 客户端示例"""
 
 import argparse
 import json
@@ -16,7 +16,7 @@ def clear_line(n: int = 1) -> None:
 
 def post_http_request(prompt: str, api_url: str, n: int = 1,
                       stream: bool = False) -> requests.Response:
-    headers = {"User-Agent": "Test Client"}
+    headers = {"User-Agent": "测试客户端"}
     pload = {
         "prompt": prompt,
         "n": n,
@@ -57,7 +57,7 @@ if __name__ == "__main__":
     n = args.n
     stream = args.stream
 
-    print(f"Prompt: {prompt!r}\n", flush=True)
+    print(f"提示词: {prompt!r}\n", flush=True)
     response = post_http_request(prompt, api_url, n, stream)
 
     if stream:
@@ -67,8 +67,8 @@ if __name__ == "__main__":
             num_printed_lines = 0
             for i, line in enumerate(h):
                 num_printed_lines += 1
-                print(f"Beam candidate {i}: {line!r}", flush=True)
+                print(f"Beam 候选 {i}: {line!r}", flush=True)
     else:
         output = get_response(response)
         for i, line in enumerate(output):
-            print(f"Beam candidate {i}: {line!r}", flush=True)
+            print(f"Beam 候选 {i}: {line!r}", flush=True)

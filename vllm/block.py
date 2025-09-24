@@ -7,10 +7,9 @@ _BLANK_TOKEN_ID = -1
 
 
 class LogicalTokenBlock:
-    """A block that stores a contiguous chunk of tokens from left to right.
+    """一个从左到右存储连续token块的块。
 
-    Logical blocks are used to represent the states of the corresponding
-    physical blocks in the KV cache.
+    逻辑块用于表示KV缓存中对应物理块的状态。
     """
 
     def __init__(
@@ -47,7 +46,7 @@ class LogicalTokenBlock:
 
 
 class PhysicalTokenBlock:
-    """Represents the state of a block in the KV cache."""
+    """表示KV缓存中块的状态。"""
 
     def __init__(
         self,

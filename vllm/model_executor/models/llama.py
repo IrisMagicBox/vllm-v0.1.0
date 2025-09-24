@@ -19,10 +19,10 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-"""Inference-only LLaMA model compatible with HuggingFace weights.
+"""仅用于推理的与 HuggingFace 权重兼容的 LLaMA 模型。
 
-The input of the model is flattened to a 1D tensor of tokens. The model uses
-InputMetadata to extract the original 2D shape of the input.
+模型的输入被展平为一维张量的令牌。模型使用 InputMetadata 
+来提取输入的原始二维形状。
 """
 from typing import Dict, List, Optional, Tuple
 
@@ -63,8 +63,8 @@ class LlamaMLP(nn.Module):
                                            bias=False, input_is_parallel=True,
                                            perform_initialization=False)
         if hidden_act != 'silu':
-            raise ValueError(f'Unsupported activation: {hidden_act}. '
-                             'Only silu is supported for now.')
+            raise ValueError(f'不支持的激活函数: {hidden_act}. '
+                             '目前仅支持 silu.')
         self.act_fn = SiluAndMul()
 
     def forward(self, x):

@@ -18,32 +18,25 @@ logger = init_logger(__name__)
 
 
 class LLMEngine:
-    """An LLM engine that receives requests and generates texts.
+    """一个接收请求并生成文本的 LLM 引擎。
 
-    This is the main class for the vLLM engine. It receives requests
-    from clients and generates texts from the LLM. It includes a tokenizer, a
-    language model (possibly distributed across multiple GPUs), and GPU memory
-    space allocated for intermediate states (aka KV cache). This class utilizes
-    iteration-level scheduling and efficient memory management to maximize the
-    serving throughput.
+    这是 vLLM 引擎的主要类。它接收来自客户端的请求并从 LLM 生成文本。它包括一个分词器，
+    一个语言模型（可能分布在多个 GPU 上），以及为中间状态（即 KV 缓存）分配的 GPU 内存空间。
+    此类利用迭代级调度和高效的内存管理来最大化服务吞吐量。
 
-    The `LLM` class wraps this class for offline batched inference and the
-    `AsyncLLMEngine` class wraps this class for online serving.
+    `LLM` 类包装此类以进行离线批处理推理，而 `AsyncLLMEngine` 类包装此类以进行在线服务。
 
-    NOTE: The config arguments are derived from the `EngineArgs` class. For the
-    comprehensive list of arguments, see `EngineArgs`.
+    注意：配置参数来自 `EngineArgs` 类。有关参数的完整列表，请参见 `EngineArgs`。
 
     Args:
-        model_config: The configuration related to the LLM model.
-        cache_config: The configuration related to the KV cache memory
-            management.
-        parallel_config: The configuration related to distributed execution.
-        scheduler_config: The configuration related to the request scheduler.
-        distributed_init_method: The initialization method for distributed
-            execution. See `torch.distributed.init_process_group` for details.
-        stage_devices: The list of devices for each stage. Each stage is a list
-            of (rank, node_resource, device) tuples.
-        log_stats: Whether to log statistics.
+        model_config: 与 LLM 模型相关的配置。
+        cache_config: 与 KV 缓存内存管理相关的配置。
+        parallel_config: 与分布式执行相关的配置。
+        scheduler_config: 与请求调度器相关的配置。
+        distributed_init_method: 分布式执行的初始化方法。
+            有关详细信息，请参见 `torch.distributed.init_process_group`。
+        stage_devices: 每个阶段的设备列表。每个阶段都是一组 (rank, node_resource, device) 元组。
+        log_stats: 是否记录统计信息。
     """
 
     def __init__(
@@ -66,7 +59,7 @@ class LLMEngine:
             f"tensor_parallel_size={parallel_config.tensor_parallel_size}, "
             f"seed={model_config.seed})"
         )
-        # TODO(woosuk): Print more configs in debug mode.
+        # TODO(woosuk): 在调试模式下打印更多配置。
 
         self.model_config = model_config
         self.cache_config = cache_config
@@ -78,9 +71,9 @@ class LLMEngine:
         self.tokenizer = get_tokenizer(model_config.model)
         self.seq_counter = Counter()
 
-        # Create the parallel GPU workers.
+        # 创建并行 GPU 工作进程。
         self.workers: List[Worker] = []
-        assert len(stage_devices) == 1, "Only support one stage for now."
+        assert len(stage_devices) == 1, "目前只支持一个阶段。"
         for rank, node_resource, _ in stage_devices[0]:
             worker_cls = Worker
             if self.parallel_config.worker_use_ray:
@@ -98,10 +91,10 @@ class LLMEngine:
                 distributed_init_method,
             )
             self.workers.append(worker)
-        # Profile the memory usage and initialize the cache.
+        # 分析内存使用情况并初始化缓存。
         self._init_cache()
 
-        # Create the scheduler.
+        # 创建调度器。
         self.scheduler = Scheduler(scheduler_config, cache_config, log_stats)
 
     def _verify_args(self) -> None:
@@ -109,8 +102,8 @@ class LLMEngine:
         self.cache_config.verify_with_parallel_config(self.parallel_config)
 
     def _init_cache(self) -> None:
-        """Profiles the memory usage and initializes the KV cache."""
-        # Get the maximum number of blocks that can be allocated on GPU and CPU.
+        """分析内存使用情况并初始化 KV 缓存。"""
+        # 获取可以在 GPU 和 CPU 上分配的最大块数。
         num_blocks = self._run_workers(
             "profile_num_available_blocks",
             get_all_outputs=True,
@@ -119,29 +112,28 @@ class LLMEngine:
             cpu_swap_space=self.cache_config.swap_space_bytes,
         )
 
-        # Since we use a shared centralized controller, we take the minimum
-        # number of blocks across all workers to make sure all the memory
-        # operators can be applied to all workers.
+        # 由于我们使用共享的中央控制器，我们取所有工作进程中的最小块数，
+        # 以确保内存操作可以应用到所有工作进程。
         num_gpu_blocks = min(b[0] for b in num_blocks)
         num_cpu_blocks = min(b[1] for b in num_blocks)
-        # FIXME(woosuk): Change to debug log.
-        logger.info(f'# GPU blocks: {num_gpu_blocks}, '
-                    f'# CPU blocks: {num_cpu_blocks}')
+        # FIXME(woosuk): 更改为调试日志。
+        logger.info(f'# GPU 块: {num_gpu_blocks}, '
+                    f'# CPU 块: {num_cpu_blocks}')
         self.cache_config.num_gpu_blocks = num_gpu_blocks
         self.cache_config.num_cpu_blocks = num_cpu_blocks
 
-        # Initialize the cache.
+        # 初始化缓存。
         self._run_workers("init_cache_engine", cache_config=self.cache_config)
 
     @classmethod
     def from_engine_args(cls, engine_args: EngineArgs) -> "LLMEngine":
-        """Creates an LLM engine from the engine arguments."""
-        # Create the engine configs.
+        """根据引擎参数创建 LLM 引擎。"""
+        # 创建引擎配置。
         engine_configs = engine_args.create_engine_configs()
         parallel_config = engine_configs[2]
-        # Initialize the cluster.
+        # 初始化集群。
         distributed_init_method, devices = initialize_cluster(parallel_config)
-        # Create the LLM engine.
+        # 创建 LLM 引擎。
         engine = cls(*engine_configs, distributed_init_method, devices,
                      log_stats=not engine_args.disable_log_stats)
         return engine
@@ -154,21 +146,18 @@ class LLMEngine:
         prompt_token_ids: Optional[List[int]] = None,
         arrival_time: Optional[float] = None,
     ) -> None:
-        """Add a request to the engine's request pool.
+        """将请求添加到引擎的请求池中。
 
-        The request is added to the request pool and will be processed by the
-        scheduler as `engine.step()` is called. The exact scheduling policy is
-        determined by the scheduler.
+        请求被添加到请求池中，并在调用 `engine.step()` 时由调度器处理。
+        确切的调度策略由调度器确定。
 
         Args:
-            request_id: The unique ID of the request.
-            prompt: The prompt string. Can be None if prompt_token_ids is
-                provided.
-            sampling_params: The sampling parameters for text generation.
-            prompt_token_ids: The token IDs of the prompt. If None, we
-                use the tokenizer to convert the prompts to token IDs.
-            arrival_time: The arrival time of the request. If None, we use
-                the current time.
+            request_id: 请求的唯一 ID。
+            prompt: 提示字符串。如果提供了 prompt_token_ids，则可以为 None。
+            sampling_params: 文本生成的采样参数。
+            prompt_token_ids: 提示的令牌 ID。如果为 None，我们使用
+                分词器将提示转换为令牌 ID。
+            arrival_time: 请求到达时间。如果为 None，我们使用当前时间。
         """
         if arrival_time is None:
             arrival_time = time.time()
@@ -176,7 +165,7 @@ class LLMEngine:
             assert prompt is not None
             prompt_token_ids = self.tokenizer.encode(prompt)
 
-        # Create the sequences.
+        # 创建序列。
         block_size = self.cache_config.block_size
         seqs: List[Sequence] = []
         for _ in range(sampling_params.best_of):
@@ -184,44 +173,42 @@ class LLMEngine:
             seq = Sequence(seq_id, prompt, prompt_token_ids, block_size)
             seqs.append(seq)
 
-        # Create the sequence group.
+        # 创建序列组。
         seq_group = SequenceGroup(request_id, seqs, sampling_params,
                                   arrival_time)
 
-        # Add the sequence group to the scheduler.
+        # 将序列组添加到调度器。
         self.scheduler.add_seq_group(seq_group)
 
     def abort_request(self, request_id: str) -> None:
-        """Aborts a request with the given ID.
+        """中止具有给定 ID 的请求。
 
         Args:
-            request_id: The ID of the request to abort.
+            request_id: 要中止的请求的 ID。
         """
         self.scheduler.abort_seq_group(request_id)
 
     def get_num_unfinished_requests(self) -> int:
-        """Gets the number of unfinished requests."""
+        """获取未完成请求的数量。"""
         return self.scheduler.get_num_unfinished_seq_groups()
 
     def has_unfinished_requests(self) -> bool:
-        """Returns True if there are unfinished requests."""
+        """如果有未完成的请求，则返回 True。"""
         return self.scheduler.has_unfinished_seqs()
 
     def step(self) -> List[RequestOutput]:
-        """Performs one decoding iteration and returns newly generated results.
+        """执行一次解码迭代并返回新生成的结果。
 
-        This function performs one decoding iteration of the engine. It first
-        schedules the sequences to be executed in the next iteration and the
-        token blocks to be swapped in/out/copy. Then, it executes the model
-        and updates the scheduler with the model outputs. Finally, it decodes
-        the sequences and returns the newly generated results.
+        此函数执行引擎的一次解码迭代。它首先调度在下次迭代中要执行的序列和
+        要交换进/出/复制的令牌块。然后，它执行模型并使用模型输出更新调度器。
+        最后，它解码序列并返回新生成的结果。
         """
         seq_group_metadata_list, scheduler_outputs = self.scheduler.schedule()
         if (not seq_group_metadata_list) and scheduler_outputs.is_empty():
-            # Nothing to do.
+            # 无事可做。
             return []
 
-        # Execute the model.
+        # 执行模型。
         output = self._run_workers(
             "execute_model",
             seq_group_metadata_list=seq_group_metadata_list,
@@ -229,17 +216,17 @@ class LLMEngine:
             blocks_to_swap_out=scheduler_outputs.blocks_to_swap_out,
             blocks_to_copy=scheduler_outputs.blocks_to_copy,
         )
-        # Update the scheduler with the model outputs.
+        # 使用模型输出更新调度器。
         seq_groups = self.scheduler.update(output)
 
-        # Decode the sequences.
+        # 解码序列。
         self._decode_sequences(seq_groups)
-        # Stop the sequences that meet the stopping criteria.
+        # 停止满足停止条件的序列。
         self._stop_sequences(seq_groups)
-        # Free the finished sequence groups.
+        # 释放已完成的序列组。
         self.scheduler.free_finished_seq_groups()
 
-        # Create the outputs.
+        # 创建输出。
         request_outputs: List[RequestOutput] = []
         for seq_group in seq_groups:
             request_output = RequestOutput.from_seq_group(seq_group)
@@ -247,7 +234,7 @@ class LLMEngine:
         return request_outputs
 
     def _decode_sequences(self, seq_groups: List[SequenceGroup]) -> None:
-        """Decodes the sequence outputs."""
+        """解码序列输出。"""
         for seq_group in seq_groups:
             for seq in seq_group.get_seqs(status=SequenceStatus.RUNNING):
                 new_token, new_output_text = detokenize_incrementally(
@@ -260,16 +247,15 @@ class LLMEngine:
                 seq.output_text = new_output_text
 
     def _stop_sequences(self, seq_groups: List[SequenceGroup]) -> None:
-        """Stop the finished sequences."""
+        """停止已完成的序列。"""
         for seq_group in seq_groups:
             sampling_params = seq_group.sampling_params
             for seq in seq_group.get_seqs(status=SequenceStatus.RUNNING):
-                # Check if the sequence has generated a stop string.
+                # 检查序列是否已生成停止字符串。
                 stopped = False
                 for stop_str in sampling_params.stop:
                     if seq.output_text.endswith(stop_str):
-                        # Truncate the output text so that the stop string is
-                        # not included in the output.
+                        # 截断输出文本，使停止字符串不包含在输出中。
                         seq.output_text = seq.output_text[:-len(stop_str)]
                         self.scheduler.free_seq(seq,
                                                 SequenceStatus.FINISHED_STOPPED)
@@ -278,12 +264,12 @@ class LLMEngine:
                 if stopped:
                     continue
 
-                # Check if the sequence has reached max_tokens.
+                # 检查序列是否已达到 max_tokens。
                 if seq.get_output_len() == sampling_params.max_tokens:
                     self.scheduler.free_seq(
                         seq, SequenceStatus.FINISHED_LENGTH_CAPPED)
                     continue
-                # Check if the sequence has generated the EOS token.
+                # 检查序列是否已生成 EOS 令牌。
                 if not sampling_params.ignore_eos:
                     if seq.get_last_token_id() == self.tokenizer.eos_token_id:
                         self.scheduler.free_seq(seq,
@@ -297,7 +283,7 @@ class LLMEngine:
         *args,
         **kwargs,
     ) -> Any:
-        """Runs the given method on all workers."""
+        """在所有工作进程上运行给定方法。"""
         all_outputs = []
         for worker in self.workers:
             executor = getattr(worker, method)
@@ -313,7 +299,7 @@ class LLMEngine:
         if get_all_outputs:
             return all_outputs
 
-        # Make sure all workers have the same results.
+        # 确保所有工作进程都有相同的结果。
         output = all_outputs[0]
         for other_output in all_outputs[1:]:
             assert output == other_output

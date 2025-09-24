@@ -8,5 +8,5 @@ PYBIND11_MODULE(TORCH_EXTENSION_NAME, m) {
   m.def(
     "silu_and_mul",
     &silu_and_mul,
-    "Activation function used in SwiGLU.");
+    "SwiGLU中使用的激活函数。");
 }

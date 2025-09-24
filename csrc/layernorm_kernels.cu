@@ -5,7 +5,7 @@
 
 namespace vllm {
 
-// TODO(woosuk): Further optimize this kernel.
+// TODO(woosuk): 进一步优化这个内核。
 template<typename scalar_t>
 __global__ void rms_norm_kernel(
   scalar_t* __restrict__ out,             // [num_tokens, hidden_size]

@@ -1,20 +1,18 @@
 /*
- * Adapted from https://github.com/NVIDIA/FasterTransformer/blob/release/v5.3_tag/src/fastertransformer/kernels/decoder_masked_multihead_attention/decoder_masked_multihead_attention_template.hpp
- * and https://github.com/NVIDIA/FasterTransformer/blob/release/v5.3_tag/src/fastertransformer/kernels/decoder_masked_multihead_attention_utils.h
- * Copyright (c) 2023, The vLLM team.
- * Copyright (c) 2020-2023, NVIDIA CORPORATION.  All rights reserved.
+ * 改编自 https://github.com/NVIDIA/FasterTransformer/blob/release/v5.3_tag/src/fastertransformer/kernels/decoder_masked_multihead_attention/decoder_masked_multihead_attention_template.hpp
+ * 和 https://github.com/NVIDIA/FasterTransformer/blob/release/v5.3_tag/src/fastertransformer/kernels/decoder_masked_multihead_attention_utils.h
+ * 版权所有 (c) 2023, vLLM 团队。
+ * 版权所有 (c) 2020-2023, NVIDIA CORPORATION。保留所有权利。
  *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
+ * 根据 Apache 许可证 2.0 版（"许可证"）进行许可；
+ * 除了遵守许可证外，不得使用此文件。
+ * 您可以在以下位置获得许可证副本：
  *
  *     http://www.apache.org/licenses/LICENSE-2.0
  *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
+ * 除非适用法律要求或书面同意，根据许可证分发的软件
+ * 按"现状"分发，不附带任何明示或暗示的担保条件。
+ * 有关许可证下权限和限制的具体语言，请参见许可证。
  */
 #pragma once
 
@@ -27,7 +25,7 @@
 
 namespace vllm {
 
-// Define custom BF16 vector data types.
+// 定义自定义 BF16 向量数据类型。
 struct bf16_4_t {
   __nv_bfloat162 x;
   __nv_bfloat162 y;
@@ -40,7 +38,7 @@ struct bf16_8_t {
   __nv_bfloat162 w;
 };
 
-// BF16 vector types for Q, K, V.
+// 用于 Q, K, V 的 BF16 向量类型。
 template<>
 struct Vec<__nv_bfloat16, 1> {
   using Type = __nv_bfloat16;
@@ -58,7 +56,7 @@ struct Vec<__nv_bfloat16, 8> {
   using Type = bf16_8_t;
 };
 
-// FP32 accumulator vector types corresponding to Vec.
+// 对应 Vec 的 FP32 累加器向量类型。
 template<>
 struct FloatVec<__nv_bfloat16> {
   using Type = float;
@@ -76,7 +74,7 @@ struct FloatVec<bf16_8_t> {
   using Type = Float8_;
 };
 
-// Utility functions for type conversions.
+// 类型转换的实用函数。
 inline __device__ float2 bf1622float2(const __nv_bfloat162 val) {
 #if defined(__CUDA_ARCH__) && __CUDA_ARCH__ < 800
   assert(false);
@@ -93,7 +91,7 @@ inline __device__ __nv_bfloat162 bf162bf162(const __nv_bfloat16 val) {
 #endif
 }
 
-// Vector addition.
+// 向量加法。
 inline __device__ __nv_bfloat16 add(__nv_bfloat16 a, __nv_bfloat16 b) {
 #if defined(__CUDA_ARCH__) && __CUDA_ARCH__ < 800
   assert(false);
@@ -147,7 +145,7 @@ inline __device__ Float8_ add(bf16_8_t a, Float8_ fb) {
   return fc;
 }
 
-// Vector multiplication.
+// 向量乘法。
 template<>
 inline __device__ __nv_bfloat16 mul(__nv_bfloat16 a, __nv_bfloat16 b) {
 #if defined(__CUDA_ARCH__) && __CUDA_ARCH__ < 800
@@ -266,7 +264,7 @@ inline __device__ Float8_ mul(__nv_bfloat16 a, bf16_8_t b) {
   return fc;
 }
 
-// Vector fused multiply-add.
+// 向量融合乘加运算。
 inline __device__ __nv_bfloat162 fma(__nv_bfloat162 a, __nv_bfloat162 b, __nv_bfloat162 c) {
 #if defined(__CUDA_ARCH__) && __CUDA_ARCH__ < 800
   assert(false);
@@ -365,7 +363,7 @@ inline __device__ Float8_ fma(__nv_bfloat16 a, bf16_8_t b, Float8_ fc) {
   return fd;
 }
 
-// Vector sum.
+// 向量求和。
 template<>
 inline __device__ float sum(__nv_bfloat16 v) {
   return __bfloat162float(v);
@@ -387,7 +385,7 @@ inline __device__ float sum(bf16_8_t v) {
   return sum(v.x) + sum(v.y) + sum(v.z) + sum(v.w);
 }
 
-// From float32 to bfloat16.
+// 从 float32 到 bfloat16。
 inline __device__ void from_float(__nv_bfloat16& dst, float src) {
   dst = __float2bfloat16(src);
 }

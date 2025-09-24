@@ -1,1 +1,1 @@
-The files in this folder are ported from [Megatron-LM](https://github.com/NVIDIA/Megatron-LM/tree/main/megatron/core). We only keep the codes that are used in inference.
+此文件夹中的文件是从 [Megatron-LM](https://github.com/NVIDIA/Megatron-LM/tree/main/megatron/core) 移植过来的。我们只保留了在推理中使用的代码。

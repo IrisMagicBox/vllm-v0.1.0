@@ -83,7 +83,7 @@ def ref_multi_query_kv_attention(
         end_idx = cu_seq_lens[i + 1]
         seq_len = end_idx - start_idx
 
-        # Create attention mask.
+        # 创建注意力掩码
         attn_mask = torch.triu(
             torch.ones(seq_len, seq_len, dtype=dtype), diagonal=1)
         attn_mask = attn_mask * torch.finfo(dtype).min
@@ -124,7 +124,7 @@ def ref_multi_query_cached_kv_attention(
         context_len = int(context_lens[i])
         block_table = block_tables[i]
 
-        # Create attention mask
+        # 创建注意力掩码
         attn_mask = torch.triu(
             torch.ones(query_len, context_len), diagonal=context_len - query_len + 1) * -1e5
         attn_mask = attn_mask.to(dtype=dtype, device='cuda')
@@ -218,10 +218,9 @@ def run_single_query_cached_kv_attention(
         block_tables,
         context_lens,
     )
-    # NOTE(woosuk): Due to the difference in the data types the two
-    # implementations use for attention softmax logits and accumulation,
-    # there is a small difference in the final outputs.
-    # We should use a relaxed tolerance for the test.
+    # 注意(woosuk): 由于两种实现用于注意力softmax logits和累积的数据类型不同，
+    # 最终输出存在微小差异。
+    # 我们应该对测试使用较宽松的容差。
     assert torch.allclose(output, ref_output, atol=1e-3, rtol=1e-5)
 
 
@@ -232,6 +231,7 @@ def run_multi_query_kv_attention(
     head_size: int,
     dtype: torch.dtype,
 ) -> None:
+    """运行多查询KV注意力计算的测试"""
     seq_lens = random.sample(range(1, MAX_SEQ_LEN), num_seqs)
     num_tokens = sum(seq_lens)
 
@@ -268,12 +268,13 @@ def run_multi_query_kv_attention(
 
 
 def test_single_query_cached_kv_attention() -> None:
+    """测试单查询缓存KV注意力计算的函数"""
     torch.random.manual_seed(TEST_SEED)
     torch.cuda.manual_seed(TEST_SEED)
     for dtype in [torch.half, torch.bfloat16, torch.float]:
         for block_size in [8, 16, 32]:
             for head_size in [64, 80, 96, 128]:
-                print(f'Testing single_query_cached_kv_attention with '
+                print(f'测试 single_query_cached_kv_attention '
                       f'dtype={dtype}, block_size={block_size}, '
                       f'head_size={head_size}')
                 run_single_query_cached_kv_attention(
@@ -287,11 +288,12 @@ def test_single_query_cached_kv_attention() -> None:
 
 
 def test_multi_query_kv_attention() -> None:
+    """测试多查询KV注意力计算的函数"""
     torch.random.manual_seed(TEST_SEED)
     torch.cuda.manual_seed(TEST_SEED)
     for dtype in [torch.half, torch.bfloat16, torch.float]:
         for head_size in [64, 80, 96, 128]:
-            print(f'Testing multi_query_kv_attention with dtype={dtype}, '
+            print(f'测试 multi_query_kv_attention dtype={dtype}, '
                   f'head_size={head_size}')
             run_multi_query_kv_attention(
                 num_seqs=5,

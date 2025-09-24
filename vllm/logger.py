@@ -9,7 +9,7 @@ _DATE_FORMAT = "%m-%d %H:%M:%S"
 
 
 class NewLineFormatter(logging.Formatter):
-    """Adds logging prefix to newlines to align multi-line messages."""
+    """为换行添加日志前缀以对齐多行消息。"""
 
     def __init__(self, fmt, datefmt=None):
         logging.Formatter.__init__(self, fmt, datefmt)
@@ -36,14 +36,14 @@ def _setup_logger():
         _root_logger.addHandler(_default_handler)
     fmt = NewLineFormatter(_FORMAT, datefmt=_DATE_FORMAT)
     _default_handler.setFormatter(fmt)
-    # Setting this will avoid the message
-    # being propagated to the parent logger.
+    # 设置这个将避免消息
+    # 传播到父日志记录器。
     _root_logger.propagate = False
 
 
-# The logger is initialized when the module is imported.
-# This is thread-safe as the module is only imported once,
-# guaranteed by the Python GIL.
+# 当模块被导入时初始化日志记录器。
+# 这是线程安全的，因为模块只被导入一次，
+# 由Python GIL保证。
 _setup_logger()
 
 

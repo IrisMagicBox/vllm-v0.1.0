@@ -14,10 +14,10 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-"""Inference-only OPT model compatible with HuggingFace weights.
+"""仅用于推理的与 HuggingFace 权重兼容的 OPT 模型。
 
-The input of the model is flattened to a 1D tensor of tokens. The model uses
-InputMetadata to extract the original 2D shape of the input.
+模型的输入被展平为一维张量的令牌。模型使用 InputMetadata 
+来提取输入的原始二维形状。
 """
 from typing import Dict, List, Optional, Tuple
 
@@ -43,8 +43,8 @@ KVCache = Tuple[torch.Tensor, torch.Tensor]
 class OPTLearnedPositionalEmbedding(nn.Embedding):
 
     def __init__(self, num_embeddings: int, embedding_dim: int):
-        # OPT is set up so that if padding_idx is specified then offset the embedding ids by 2
-        # and adjust num_embeddings appropriately. Other models don't have this hack
+        # OPT 设置为如果指定了 padding_idx，则将嵌入 ID 偏移 2
+        # 并适当调整 num_embeddings。其他模型没有这种技巧
         self.offset = 2
         super().__init__(num_embeddings + self.offset, embedding_dim)
 
@@ -128,9 +128,9 @@ class OPTDecoderLayer(nn.Module):
         input_metadata: InputMetadata,
         cache_event: Optional[torch.cuda.Event],
     ) -> torch.Tensor:
-        # Self Attention
+        # 自注意力
         residual = hidden_states
-        # 125m, 1.7B, ..., 175B applies layer norm BEFORE attention
+        # 125m, 1.7B, ..., 175B 在注意力之前应用层归一化
         if self.do_layer_norm_before:
             hidden_states = self.self_attn_layer_norm(hidden_states)
         hidden_states = self.self_attn(
@@ -139,20 +139,20 @@ class OPTDecoderLayer(nn.Module):
             input_metadata=input_metadata,
             cache_event=cache_event)
         hidden_states = residual + hidden_states
-        # 350m applies layer norm AFTER attention
+        # 350m 在注意力之后应用层归一化
         if not self.do_layer_norm_before:
             hidden_states = self.self_attn_layer_norm(hidden_states)
 
-        # Fully Connected
+        # 全连接
         residual = hidden_states
-        # 125m, 1.7B, ..., 175B applies layer norm BEFORE attention
+        # 125m, 1.7B, ..., 175B 在注意力之前应用层归一化
         if self.do_layer_norm_before:
             hidden_states = self.final_layer_norm(hidden_states)
         hidden_states, _ = self.fc1(hidden_states)
         hidden_states = self.activation_fn(hidden_states)
         hidden_states, _ = self.fc2(hidden_states)
         hidden_states = residual + hidden_states
-        # 350m applies layer norm AFTER attention
+        # 350m 在注意力之后应用层归一化
         if not self.do_layer_norm_before:
             hidden_states = self.final_layer_norm(hidden_states)
         return hidden_states
@@ -185,9 +185,8 @@ class OPTDecoder(nn.Module):
         else:
             self.project_in = None
 
-        # Note that the only purpose of `config._remove_final_layer_norm` is to keep backward compatibility
-        # with checkpoints that have been fine-tuned before transformers v4.20.1
-        # see https://github.com/facebookresearch/metaseq/pull/164
+        # 请注意，`config._remove_final_layer_norm` 的唯一目的是保持与在 transformers v4.20.1 之前微调的检查点的向后兼容性
+        # 参见 https://github.com/facebookresearch/metaseq/pull/164
         if config.do_layer_norm_before and not config._remove_final_layer_norm:
             self.final_layer_norm = nn.LayerNorm(
                 config.hidden_size, elementwise_affine=config.layer_norm_elementwise_affine
@@ -251,8 +250,7 @@ class OPTForCausalLM(nn.Module):
         super().__init__()
         self.config = config
         self.model = OPTModel(config)
-        # TODO(zhuohan): create a new weight after implementing pipeline
-        #                parallelism
+        # TODO(zhuohan): 在实现流水线并行后创建新权重
         self.lm_head_weight = self.model.decoder.embed_tokens.weight
         self.sampler = Sampler(config.vocab_size)
 

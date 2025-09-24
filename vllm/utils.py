@@ -25,12 +25,12 @@ class Counter:
 
 
 def get_gpu_memory(gpu: int = 0) -> int:
-    """Returns the total memory of the GPU in bytes."""
+    """返回GPU的总内存，单位为字节。"""
     return torch.cuda.get_device_properties(gpu).total_memory
 
 
 def get_cpu_memory() -> int:
-    """Returns the total CPU memory of the node in bytes."""
+    """返回节点的总CPU内存，单位为字节。"""
     return psutil.virtual_memory().total
 
 

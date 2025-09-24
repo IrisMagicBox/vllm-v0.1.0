@@ -1,4 +1,4 @@
-"""Utilities for downloading and initializing model weights."""
+"""用于下载和初始化模型权重的工具."""
 import filelock
 import glob
 import json
@@ -22,13 +22,13 @@ def hf_model_weights_iterator(
     cache_dir: Optional[str] = None,
     use_np_cache: bool = False,
 ) -> Iterator[Tuple[str, torch.Tensor]]:
-    # Prepare file lock directory to prevent multiple processes from
-    # downloading the same model weights at the same time.
+    # 准备文件锁目录以防止多个进程同时
+    # 下载相同的模型权重.
     lock_dir = cache_dir if cache_dir is not None else "/tmp"
     lock_file_name = model_name_or_path.replace("/", "-") + ".lock"
     lock = filelock.FileLock(os.path.join(lock_dir, lock_file_name))
 
-    # Download model weights from huggingface.
+    # 从huggingface下载模型权重.
     is_local = os.path.isdir(model_name_or_path)
     if not is_local:
         with lock:
@@ -42,8 +42,8 @@ def hf_model_weights_iterator(
     hf_bin_files = glob.glob(os.path.join(hf_folder, "*.bin"))
 
     if use_np_cache:
-        # Convert the model weights from torch tensors to numpy arrays for
-        # faster loading.
+        # 将模型权重从torch张量转换为numpy数组以
+        # 加快加载速度.
         np_folder = os.path.join(hf_folder, 'np')
         os.makedirs(np_folder, exist_ok=True)
         weight_names_file = os.path.join(np_folder, 'weight_names.json')
@@ -107,12 +107,13 @@ def initialize_dummy_weights(
     low: float = -1e-3,
     high: float = 1e-3,
 ) -> None:
-    """Initialize model weights with random values.
+    """使用随机值初始化模型权重.
 
-    The model weights must be randomly initialized for accurate performance
-    measurements. Additionally, the model weights should not cause NaNs in the
-    forward pass. We empirically found that initializing the weights with
-    values between -1e-3 and 1e-3 works well for most models.
+    模型权重必须随机初始化以进行准确的性能
+    测量. 此外, 模型权重不应在
+    前向传递中导致NaN. 我们根据经验发现, 在
+    -1e-3 和 1e-3 之间的值初始化权重
+    对大多数模型效果良好.
     """
     for param in model.state_dict().values():
         param.data.uniform_(low, high)

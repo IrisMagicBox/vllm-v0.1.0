@@ -3,41 +3,39 @@ from typing import List, Optional, Union
 
 
 class SamplingParams:
-    """Sampling parameters for text generation.
+    """文本生成的采样参数。
 
-    Overall, we follow the sampling parameters from the OpenAI text completion
-    API (https://platform.openai.com/docs/api-reference/completions/create).
-    In addition, we support beam search, which is not supported by OpenAI.
+    总体而言，我们遵循OpenAI文本补全API的采样参数
+    (https://platform.openai.com/docs/api-reference/completions/create)。
+    此外，我们还支持beam search，这是OpenAI不支持的。
 
     Args:
-        n: Number of output sequences to return for the given prompt.
-        best_of: Number of output sequences that are generated from the prompt.
-            From these `best_of` sequences, the top `n` sequences are returned.
-            `best_of` must be greater than or equal to `n`. This is treated as
-            the beam width when `use_beam_search` is True. By default, `best_of`
-            is set to `n`.
-        presence_penalty: Float that penalizes new tokens based on whether they
-            appear in the generated text so far. Values > 0 encourage the model
-            to use new tokens, while values < 0 encourage the model to repeat
-            tokens.
-        frequency_penalty: Float that penalizes new tokens based on their
-            frequency in the generated text so far. Values > 0 encourage the
-            model to use new tokens, while values < 0 encourage the model to
-            repeat tokens.
-        temperature: Float that controls the randomness of the sampling. Lower
-            values make the model more deterministic, while higher values make
-            the model more random. Zero means greedy sampling.
-        top_p: Float that controls the cumulative probability of the top tokens
-            to consider. Must be in (0, 1]. Set to 1 to consider all tokens.
-        top_k: Integer that controls the number of top tokens to consider. Set
-            to -1 to consider all tokens.
-        use_beam_search: Whether to use beam search instead of sampling.
-        stop: List of strings that stop the generation when they are generated.
-            The returned output will not contain the stop strings.
-        ignore_eos: Whether to ignore the EOS token and continue generating
-            tokens after the EOS token is generated.
-        max_tokens: Maximum number of tokens to generate per output sequence.
-        logprobs: Number of log probabilities to return per output token.
+        n: 为给定提示返回的输出序列数量。
+        best_of: 从提示生成的输出序列数量。
+            从这些`best_of`序列中，返回top `n`序列。
+            `best_of`必须大于或等于`n`。当`use_beam_search`为True时，这被视为
+            beam宽度。默认情况下，`best_of`
+            设置为`n`。
+        presence_penalty: 基于新token是否出现在已生成的文本中来惩罚新token的浮点数。
+            大于0的值鼓励模型使用新token，而小于0的值鼓励模型重复
+            token。
+        frequency_penalty: 基于新token在已生成的文本中的频率来惩罚新token的浮点数。
+            大于0的值鼓励模型使用新token，而小于0的值鼓励模型
+            重复token。
+        temperature: 控制采样随机性的浮点数。较低
+            的值使模型更加确定性，而较高的值使
+            模型更加随机。零表示贪婪采样。
+        top_p: 控制要考虑的最高token的累积概率的浮点数。
+            必须在(0, 1]范围内。设置为1以考虑所有token。
+        top_k: 控制要考虑的最高token数量的整数。设置
+            为-1以考虑所有token。
+        use_beam_search: 是否使用beam search代替采样。
+        stop: 生成时停止的字符串列表。
+            返回的输出将不包含停止字符串。
+        ignore_eos: 是否忽略EOS token并在
+            生成EOS token后继续生成token。
+        max_tokens: 每个输出序列要生成的最大token数。
+        logprobs: 每个输出token要返回的对数概率数。
     """
 
     def __init__(
@@ -72,55 +70,55 @@ class SamplingParams:
         if self.use_beam_search:
             self._verity_beam_search()
         elif self.temperature == 0.0:
-            # Zero temperature means greedy sampling.
+            # 零温度表示贪婪采样。
             self._verify_greedy_sampling()
 
     def _verify_args(self) -> None:
         if self.n < 1:
-            raise ValueError(f"n must be at least 1, got {self.n}.")
+            raise ValueError(f"n必须至少为1，得到 {self.n}.")
         if self.best_of < self.n:
-            raise ValueError(f"best_of must be greater than or equal to n, "
-                             f"got n={self.n} and best_of={self.best_of}.")
+            raise ValueError(f"best_of必须大于或等于n，"
+                             f"得到 n={self.n} 和 best_of={self.best_of}.")
         if not -2.0 <= self.presence_penalty <= 2.0:
-            raise ValueError("presence_penalty must be in [-2, 2], got "
+            raise ValueError("presence_penalty必须在[-2, 2]范围内，得到 "
                              f"{self.presence_penalty}.")
         if not -2.0 <= self.frequency_penalty <= 2.0:
-            raise ValueError("frequency_penalty must be in [-2, 2], got "
+            raise ValueError("frequency_penalty必须在[-2, 2]范围内，得到 "
                              f"{self.frequency_penalty}.")
         if self.temperature < 0.0:
             raise ValueError(
-                f"temperature must be non-negative, got {self.temperature}.")
+                f"temperature必须为非负数，得到 {self.temperature}.")
         if not 0.0 < self.top_p <= 1.0:
-            raise ValueError(f"top_p must be in (0, 1], got {self.top_p}.")
+            raise ValueError(f"top_p必须在(0, 1]范围内，得到 {self.top_p}.")
         if self.top_k < -1 or self.top_k == 0:
-            raise ValueError(f"top_k must be -1 (disable), or at least 1, "
-                             f"got {self.top_k}.")
+            raise ValueError(f"top_k必须为-1（禁用），或者至少为1，"
+                             f"得到 {self.top_k}.")
         if self.max_tokens < 1:
             raise ValueError(
-                f"max_tokens must be at least 1, got {self.max_tokens}.")
+                f"max_tokens必须至少为1，得到 {self.max_tokens}.")
         if self.logprobs is not None and self.logprobs < 0:
             raise ValueError(
-                f"logprobs must be non-negative, got {self.logprobs}.")
+                f"logprobs必须为非负数，得到 {self.logprobs}.")
 
     def _verity_beam_search(self) -> None:
         if self.best_of == 1:
-            raise ValueError("best_of must be greater than 1 when using beam "
-                             f"search. Got {self.best_of}.")
+            raise ValueError("使用beam search时best_of必须大于1。"
+                             f"得到 {self.best_of}.")
         if self.temperature > 0.0:
-            raise ValueError("temperature must be 0 when using beam search.")
+            raise ValueError("使用beam search时temperature必须为0。")
         if self.top_p < 1.0:
-            raise ValueError("top_p must be 1 when using beam search.")
+            raise ValueError("使用beam search时top_p必须为1。")
         if self.top_k != -1:
-            raise ValueError("top_k must be -1 when using beam search.")
+            raise ValueError("使用beam search时top_k必须为-1。")
 
     def _verify_greedy_sampling(self) -> None:
         if self.best_of > 1:
-            raise ValueError("best_of must be 1 when using greedy sampling."
-                             f"Got {self.best_of}.")
+            raise ValueError("使用贪婪采样时best_of必须为1。"
+                             f"得到 {self.best_of}.")
         if self.top_p < 1.0:
-            raise ValueError("top_p must be 1 when using greedy sampling.")
+            raise ValueError("使用贪婪采样时top_p必须为1。")
         if self.top_k != -1:
-            raise ValueError("top_k must be -1 when using greedy sampling.")
+            raise ValueError("使用贪婪采样时top_k必须为-1。")
 
     def __repr__(self) -> str:
         return (f"SamplingParams(n={self.n}, "

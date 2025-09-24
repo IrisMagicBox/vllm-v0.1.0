@@ -11,9 +11,9 @@ from torch.utils.cpp_extension import BuildExtension, CUDAExtension, CUDA_HOME
 
 ROOT_DIR = os.path.dirname(__file__)
 
-# Compiler flags.
+# 编译器标志。
 CXX_FLAGS = ["-g", "-O2", "-std=c++17"]
-# TODO(woosuk): Should we use -O3?
+# TODO(woosuk): 我们应该使用 -O3 吗？
 NVCC_FLAGS = ["-O2", "-std=c++17"]
 
 ABI = 1 if torch._C._GLIBCXX_USE_CXX11_ABI else 0
@@ -27,9 +27,9 @@ if not torch.cuda.is_available():
 
 
 def get_nvcc_cuda_version(cuda_dir: str) -> Version:
-    """Get the CUDA version from nvcc.
+    """从nvcc获取CUDA版本。
 
-    Adapted from https://github.com/NVIDIA/apex/blob/8b7a1ff183741dd8f9b87e7bafd04cfde99cea28/setup.py
+    来源于 https://github.com/NVIDIA/apex/blob/8b7a1ff183741dd8f9b87e7bafd04cfde99cea28/setup.py
     """
     nvcc_output = subprocess.check_output([cuda_dir + "/bin/nvcc", "-V"],
                                           universal_newlines=True)
@@ -39,41 +39,41 @@ def get_nvcc_cuda_version(cuda_dir: str) -> Version:
     return nvcc_cuda_version
 
 
-# Collect the compute capabilities of all available GPUs.
+# 收集所有可用GPU的计算能力。
 device_count = torch.cuda.device_count()
 compute_capabilities: Set[int] = set()
 for i in range(device_count):
     major, minor = torch.cuda.get_device_capability(i)
     if major < 7:
         raise RuntimeError(
-            "GPUs with compute capability less than 7.0 are not supported.")
+            "不支持计算能力低于7.0的GPU。")
     compute_capabilities.add(major * 10 + minor)
-# If no GPU is available, add all supported compute capabilities.
+# 如果没有可用的GPU，添加所有支持的计算能力。
 if not compute_capabilities:
     compute_capabilities = {70, 75, 80, 86, 90}
-# Add target compute capabilities to NVCC flags.
+# 将目标计算能力添加到NVCC标志中。
 for capability in compute_capabilities:
     NVCC_FLAGS += ["-gencode", f"arch=compute_{capability},code=sm_{capability}"]
 
-# Validate the NVCC CUDA version.
+# 验证NVCC CUDA版本。
 nvcc_cuda_version = get_nvcc_cuda_version(CUDA_HOME)
 if nvcc_cuda_version < Version("11.0"):
-    raise RuntimeError("CUDA 11.0 or higher is required to build the package.")
+    raise RuntimeError("构建包需要CUDA 11.0或更高版本。")
 if 86 in compute_capabilities and nvcc_cuda_version < Version("11.1"):
     raise RuntimeError(
-        "CUDA 11.1 or higher is required for GPUs with compute capability 8.6.")
+        "计算能力为8.6的GPU需要CUDA 11.1或更高版本。")
 if 90 in compute_capabilities and nvcc_cuda_version < Version("11.8"):
     raise RuntimeError(
-        "CUDA 11.8 or higher is required for GPUs with compute capability 9.0.")
+        "计算能力为9.0的GPU需要CUDA 11.8或更高版本。")
 
-# Use NVCC threads to parallelize the build.
+# 使用NVCC线程来并行化构建。
 if nvcc_cuda_version >= Version("11.2"):
     num_threads = min(os.cpu_count(), 8)
     NVCC_FLAGS += ["--threads", str(num_threads)]
 
 ext_modules = []
 
-# Cache operations.
+# 缓存操作。
 cache_extension = CUDAExtension(
     name="vllm.cache_ops",
     sources=["csrc/cache.cpp", "csrc/cache_kernels.cu"],
@@ -81,7 +81,7 @@ cache_extension = CUDAExtension(
 )
 ext_modules.append(cache_extension)
 
-# Attention kernels.
+# 注意力内核。
 attention_extension = CUDAExtension(
     name="vllm.attention_ops",
     sources=["csrc/attention.cpp", "csrc/attention/attention_kernels.cu"],
@@ -89,7 +89,7 @@ attention_extension = CUDAExtension(
 )
 ext_modules.append(attention_extension)
 
-# Positional encoding kernels.
+# 位置编码内核。
 positional_encoding_extension = CUDAExtension(
     name="vllm.pos_encoding_ops",
     sources=["csrc/pos_encoding.cpp", "csrc/pos_encoding_kernels.cu"],
@@ -97,7 +97,7 @@ positional_encoding_extension = CUDAExtension(
 )
 ext_modules.append(positional_encoding_extension)
 
-# Layer normalization kernels.
+# 层归一化内核。
 layernorm_extension = CUDAExtension(
     name="vllm.layernorm_ops",
     sources=["csrc/layernorm.cpp", "csrc/layernorm_kernels.cu"],
@@ -105,7 +105,7 @@ layernorm_extension = CUDAExtension(
 )
 ext_modules.append(layernorm_extension)
 
-# Activation kernels.
+# 激活内核。
 activation_extension = CUDAExtension(
     name="vllm.activation_ops",
     sources=["csrc/activation.cpp", "csrc/activation_kernels.cu"],
@@ -119,9 +119,9 @@ def get_path(*filepath) -> str:
 
 
 def find_version(filepath: str):
-    """Extract version information from the given filepath.
+    """从给定的文件路径中提取版本信息。
 
-    Adapted from https://github.com/ray-project/ray/blob/0b190ee1160eeca9796bc091e07eaebf4c85b511/python/setup.py
+    来源于 https://github.com/ray-project/ray/blob/0b190ee1160eeca9796bc091e07eaebf4c85b511/python/setup.py
     """
     with open(filepath) as fp:
         version_match = re.search(
@@ -132,12 +132,12 @@ def find_version(filepath: str):
 
 
 def read_readme() -> str:
-    """Read the README file."""
+    """读取 README 文件。"""
     return io.open(get_path("README.md"), "r", encoding="utf-8").read()
 
 
 def get_requirements() -> List[str]:
-    """Get Python package dependencies from requirements.txt."""
+    """从 requirements.txt 获取 Python 包依赖。"""
     with open(get_path("requirements.txt")) as f:
         requirements = f.read().strip().split("\n")
     return requirements
@@ -148,7 +148,7 @@ setuptools.setup(
     version=find_version(get_path("vllm", "__init__.py")),
     author="vLLM Team",
     license="Apache 2.0",
-    description="A high-throughput and memory-efficient inference and serving engine for LLMs",
+    description="一个高吞吐量和内存高效的 LLM 推理和服务引擎",
     long_description=read_readme(),
     long_description_content_type="text/markdown",
     url="https://github.com/vllm-project/vllm",

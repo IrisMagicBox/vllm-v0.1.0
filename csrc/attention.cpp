@@ -15,5 +15,5 @@ PYBIND11_MODULE(TORCH_EXTENSION_NAME, m) {
   m.def(
     "single_query_cached_kv_attention",
     &single_query_cached_kv_attention,
-    "Compute the attention between an input query and the cached key/value tensors");
+    "计算输入查询与缓存的键/值张量之间的注意力");
 }

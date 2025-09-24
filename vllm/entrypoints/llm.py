@@ -11,28 +11,23 @@ from vllm.utils import Counter
 
 
 class LLM:
-    """An LLM for generating texts from given prompts and sampling parameters.
+    """一个用于根据给定提示和采样参数生成文本的大语言模型。
 
-    This class includes a tokenizer, a language model (possibly distributed
-    across multiple GPUs), and GPU memory space allocated for intermediate
-    states (aka KV cache). Given a batch of prompts and sampling parameters,
-    this class generates texts from the model, using an intelligent batching
-    mechanism and efficient memory management.
+    该类包括一个分词器、一个语言模型（可能分布在多个GPU上），
+    以及为中间状态（也称为KV缓存）分配的GPU内存空间。给定一批提示和采样参数，
+    该类使用智能批处理机制和高效内存管理从模型生成文本。
 
-    NOTE: This class is intended to be used for offline inference. For online
-    serving, use the `AsyncLLMEngine` class instead.
-    NOTE: For the comprehensive list of arguments, see `EngineArgs`.
+    注意：该类用于离线推理。对于在线服务，请使用 `AsyncLLMEngine` 类。
+    注意：有关参数的完整列表，请参见 `EngineArgs`。
 
     Args:
-        model: The name or path of a HuggingFace Transformers model.
-        tensor_parallel_size: The number of GPUs to use for distributed
-            execution with tensor parallelism.
-        dtype: The data type for the model weights and activations. Currently,
-            we support `float32`, `float16`, and `bfloat16`. If `auto`, we use
-            the `torch_dtype` attribute specified in the model config file.
-            However, if the `torch_dtype` in the config is `float32`, we will
-            use `float16` instead.
-        seed: The seed to initialize the random number generator for sampling.
+        model: HuggingFace Transformers 模型的名称或路径。
+        tensor_parallel_size: 使用张量并行进行分布式执行时要使用的GPU数量。
+        dtype: 模型权重和激活的数据类型。目前，我们支持 `float32`、`float16` 和 `bfloat16`。如果为 `auto`，我们使用
+            模型配置文件中指定的 `torch_dtype` 属性。
+            但是，如果配置中的 `torch_dtype` 为 `float32`，我们将
+            改为使用 `float16`。
+        seed: 用于初始化采样随机数生成器的种子。
     """
 
     def __init__(
@@ -67,39 +62,36 @@ class LLM:
         prompt_token_ids: Optional[List[List[int]]] = None,
         use_tqdm: bool = True,
     ) -> List[RequestOutput]:
-        """Generates the completions for the input prompts.
+        """为输入提示生成补全。
 
-        NOTE: This class automatically batches the given prompts, considering
-        the memory constraint. For the best performance, put all of your prompts
-        into a single list and pass it to this method.
+        注意：该类会自动批处理给定的提示，同时考虑内存约束。为了获得最佳性能，
+        请将所有提示放入单个列表中并将其传递给此方法。
 
         Args:
-            prompts: A list of prompts to generate completions for.
-            sampling_params: The sampling parameters for text generation. If
-                None, we use the default sampling parameters.
-            prompt_token_ids: A list of token IDs for the prompts. If None, we
-                use the tokenizer to convert the prompts to token IDs.
-            use_tqdm: Whether to use tqdm to display the progress bar.
+            prompts: 用于生成补全的提示列表。
+            sampling_params: 文本生成的采样参数。如果
+                为None，我们使用默认的采样参数。
+            prompt_token_ids: 提示的token ID列表。如果为None，我们
+                使用分词器将提示转换为token ID。
+            use_tqdm: 是否使用tqdm显示进度条。
 
         Returns:
-            A list of `RequestOutput` objects containing the generated
-            completions in the same order as the input prompts.
+            包含生成补全的 `RequestOutput` 对象列表，顺序与输入提示相同。
         """
         if prompts is None and prompt_token_ids is None:
             raise ValueError("Either prompts or prompt_token_ids must be "
                              "provided.")
         if isinstance(prompts, str):
-            # Convert a single prompt to a list.
+            # 将单个提示转换为列表。
             prompts = [prompts]
         if prompts is not None and prompt_token_ids is not None:
             if len(prompts) != len(prompt_token_ids):
-                raise ValueError("The lengths of prompts and prompt_token_ids "
-                                 "must be the same.")
+                raise ValueError("提示和提示token ID的长度必须相同。")
         if sampling_params is None:
-            # Use default sampling params.
+            # 使用默认采样参数。
             sampling_params = SamplingParams()
 
-        # Add requests to the engine.
+        # 将请求添加到引擎。
         if prompts is not None:
             num_requests = len(prompts)
         else:
@@ -124,11 +116,11 @@ class LLM:
                                     prompt_token_ids)
 
     def _run_engine(self, use_tqdm: bool) -> List[RequestOutput]:
-        # Initialize tqdm.
+        # 初始化tqdm。
         if use_tqdm:
             num_requests = self.llm_engine.get_num_unfinished_requests()
-            pbar = tqdm(total=num_requests, desc="Processed prompts")
-        # Run the engine.
+            pbar = tqdm(total=num_requests, desc="已处理的提示")
+        # 运行引擎。
         outputs: List[RequestOutput] = []
         while self.llm_engine.has_unfinished_requests():
             step_outputs = self.llm_engine.step()

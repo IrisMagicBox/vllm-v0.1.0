@@ -6,15 +6,15 @@ import torch
 from typing import List, Sequence
 
 def ensure_divisibility(numerator, denominator):
-    """Ensure that numerator is divisible by the denominator."""
-    assert numerator % denominator == 0, "{} is not divisible by {}".format(
+    """确保分子能被分母整除。"""
+    assert numerator % denominator == 0, "{} 不能被 {} 整除".format(
         numerator, denominator
     )
 
 
 def divide(numerator, denominator):
-    """Ensure that numerator is divisible by the denominator and return
-    the division value."""
+    """确保分子能被分母整除并返回
+    除法值。"""
     ensure_divisibility(numerator, denominator)
     return numerator // denominator
 
@@ -24,23 +24,22 @@ def split_tensor_along_last_dim(
     num_partitions: int,
     contiguous_split_chunks: bool = False,
 ) -> List[torch.Tensor]:
-    """ Split a tensor along its last dimension.
+    """沿最后一个维度分割张量。
 
-        Arguments:
-            tensor: input tensor.
-            num_partitions: number of partitions to split the tensor
-            contiguous_split_chunks: If True, make each chunk contiguous
-                                     in memory.
+        参数:
+            tensor: 输入张量。
+            num_partitions: 分割张量的分区数
+            contiguous_split_chunks: 如果为 True，在内存中使每个块连续。
 
-        Returns:
-            A list of Tensors
+        返回:
+            张量列表
     """
-    # Get the size and dimension.
+    # 获取大小和维度。
     last_dim = tensor.dim() - 1
     last_dim_size = divide(tensor.size()[last_dim], num_partitions)
-    # Split.
+    # 分割。
     tensor_list = torch.split(tensor, last_dim_size, dim=last_dim)
-    # Note: torch.split does not create contiguous tensors by default.
+    # 注意：torch.split 默认不会创建连续张量。
     if contiguous_split_chunks:
         return tuple(chunk.contiguous() for chunk in tensor_list)
 
@@ -48,9 +47,8 @@ def split_tensor_along_last_dim(
 
 
 class VocabUtility:
-    """ Split the vocabulary into `world_size` chunks and return the first
-        and last index of the vocabulary belonging to the `rank`
-        partition: Note that indices in [fist, last)
+    """将词汇表分割成 `world_size` 块，并返回属于 `rank` 分区的
+        词汇表的第一个和最后一个索引：注意索引在 [first, last) 中
 
     """
 

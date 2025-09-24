@@ -1,4 +1,4 @@
-"""Custom normalization layers."""
+"""自定义归一化层。"""
 import torch
 import torch.nn as nn
 
@@ -6,10 +6,10 @@ from vllm import layernorm_ops
 
 
 class RMSNorm(nn.Module):
-    """Root mean square normalization.
+    """均方根归一化。
 
-    Computes x -> w * x / sqrt(E[x^2] + eps) where w is the learned weight.
-    Refer to https://arxiv.org/abs/1910.07467
+    计算 x -> w * x / sqrt(E[x^2] + eps)，其中 w 是学习到的权重。
+    参考 https://arxiv.org/abs/1910.07467
     """
 
     def __init__(

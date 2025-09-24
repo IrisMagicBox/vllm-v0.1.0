@@ -1,25 +1,25 @@
 .. _installation:
 
-Installation
-============
+安装
+====
 
-vLLM is a Python library that also contains some C++ and CUDA code.
-This additional code requires compilation on the user's machine.
+vLLM是一个包含C++和CUDA代码的Python库。
+这些额外的代码需要在用户的机器上进行编译。
 
-Requirements
-------------
+要求
+----
 
-* OS: Linux
-* Python: 3.8 or higher
+* 操作系统: Linux
+* Python: 3.8 或更高版本
 * CUDA: 11.0 -- 11.8
-* GPU: compute capability 7.0 or higher (e.g., V100, T4, RTX20xx, A100, L4, etc.)
+* GPU: 计算能力 7.0 或更高 (例如，V100, T4, RTX20xx, A100, L4, 等)
 
 .. note::
-    As of now, vLLM does not support CUDA 12.
-    If you are using Hopper or Lovelace GPUs, please use CUDA 11.8 instead of CUDA 12.
+    目前为止，vLLM 不支持 CUDA 12。
+    如果您使用 Hopper 或 Lovelace GPU，请使用 CUDA 11.8 而不是 CUDA 12。
 
 .. tip::
-    If you have trouble installing vLLM, we recommend using the NVIDIA PyTorch Docker image.
+    如果您在安装 vLLM 时遇到问题，我们建议使用 NVIDIA PyTorch Docker 镜像。
 
     .. code-block:: console
 
@@ -28,30 +28,30 @@ Requirements
 
     Inside the Docker container, please execute :code:`pip uninstall torch` before installing vLLM.
 
-Install with pip
+使用 pip 安装
 ----------------
 
-You can install vLLM using pip:
+您可以使用 pip 安装 vLLM：
 
 .. code-block:: console
 
-    $ # (Optional) Create a new conda environment.
+    $ # (可选) 创建新的 conda 环境。
     $ conda create -n myenv python=3.8 -y
     $ conda activate myenv
 
-    $ # Install vLLM.
-    $ pip install vllm  # This may take 5-10 minutes.
+    $ # 安装 vLLM。
+    $ pip install vllm  # 这可能需要 5-10 分钟。
 
 
 .. _build_from_source:
 
-Build from source
------------------
+从源码构建
+----------
 
-You can also build and install vLLM from source:
+您也可以从源码构建和安装 vLLM：
 
 .. code-block:: console
 
     $ git clone https://github.com/vllm-project/vllm.git
     $ cd vllm
-    $ pip install -e .  # This may take 5-10 minutes.
+    $ pip install -e .  # 这可能需要 5-10 分钟。

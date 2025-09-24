@@ -1,44 +1,44 @@
 .. _adding_a_new_model:
 
-Adding a New Model
+添加新模型
 ==================
 
-This document provides a high-level guide on integrating a `HuggingFace Transformers <https://github.com/huggingface/transformers>`_ model into vLLM.
+本文档提供了将 `HuggingFace Transformers <https://github.com/huggingface/transformers>`_ 模型集成到 vLLM 的高级指南。
 
 .. note::
-    The complexity of adding a new model depends heavily on the model's architecture.
-    The process is considerably straightforward if the model shares a similar architecture with an existing model in vLLM.
-    However, for models that include new operators (e.g., a new attention mechanism), the process can be a bit more complex.
+    添加新模型的复杂性很大程度上取决于模型的架构。
+    如果模型与 vLLM 中的现有模型共享相似的架构，则此过程相当简单。
+    但是，对于包含新操作符（例如，新的注意力机制）的模型，此过程可能稍微复杂一些。
 
 .. tip::
-    If you are encountering issues while integrating your model into vLLM, feel free to open an issue on our `GitHub <https://github.com/vllm-project/vllm/issues>`_ repository.
-    We will be happy to help you out!
+    如果在将模型集成到 vLLM 时遇到问题，请随时在我们的 `GitHub <https://github.com/vllm-project/vllm/issues>`_ 仓库中提交问题。
+    我们很乐意为您提供帮助！
 
 
-0. Fork the vLLM repository
+0. Fork vLLM 仓库
 --------------------------------
 
-Start by forking our `GitHub <https://github.com/vllm-project/vllm/>`_ repository and then :ref:`build it from source <build_from_source>`.
-This gives you the ability to modify the codebase and test your model.
+首先 Fork 我们的 `GitHub <https://github.com/vllm-project/vllm/>`_ 仓库，然后 :ref:`从源码构建 <build_from_source>`。
+这使您能够修改代码库并测试您的模型。
 
 
-1. Bring your model code
+1. 引入您的模型代码
 ------------------------
 
-Clone the PyTorch model code from the HuggingFace Transformers repository and put it into the `vllm/model_executor/models <https://github.com/vllm-project/vllm/tree/main/vllm/model_executor/models>`_ directory.
-For instance, vLLM's `OPT model <https://github.com/vllm-project/vllm/blob/main/vllm/model_executor/models/opt.py>`_ was adpated from the HuggingFace's `modeling_opt.py <https://github.com/huggingface/transformers/blob/main/src/transformers/models/opt/modeling_opt.py>`_ file.
+从 HuggingFace Transformers 仓库克隆 PyTorch 模型代码并将其放入 `vllm/model_executor/models <https://github.com/vllm-project/vllm/tree/main/vllm/model_executor/models>`_ 目录。
+例如，vLLM 的 `OPT 模型 <https://github.com/vllm-project/vllm/blob/main/vllm/model_executor/models/opt.py>`_ 适配自 HuggingFace 的 `modeling_opt.py <https://github.com/huggingface/transformers/blob/main/src/transformers/models/opt/modeling_opt.py>`_ 文件。
 
 .. warning::
-    When copying the model code, make sure to review and adhere to the code's copyright and licensing terms.
+    复制模型代码时，请确保查看并遵守代码的版权和许可条款。
 
 
-2. Rewrite the :code:`forward` methods
+2. 重写 :code:`forward` 方法
 --------------------------------------
 
-Next, you need to rewrite the :code:`forward` methods of your model by following these steps:
+接下来，您需要按照以下步骤重写模型的 :code:`forward` 方法：
 
-1. Remove any unnecessary code, such as the code only used for training.
-2. Change the input parameters:
+1. 删除任何不必要的代码，例如仅用于训练的代码。
+2. 更改输入参数：
 
 .. code-block:: diff
 
@@ -61,34 +61,34 @@ Next, you need to rewrite the :code:`forward` methods of your model by following
     +    cache_events: Optional[List[torch.cuda.Event]],
     +) -> Dict[int, SequenceOutputs]:
 
-3. Update the code by considering that :code:`input_ids` and :code:`positions` are now flattened tensors.
-4. Replace the attention operation with either :code:`GPTPagedAttention` or :code:`GPTNeoXPagedAttention`, depending on the model's architecture.
+3. 考虑到 :code:`input_ids` 和 :code:`positions` 现在是展平的张量，更新代码。
+4. 根据模型的架构，用 :code:`GPTPagedAttention` 或 :code:`GPTNeoXPagedAttention` 替换注意力操作。
 
 .. note::
-    Currently, vLLM supports the basic multi-head attention mechanism and its variant with rotary positional embeddings.
-    If your model employs a different attention mechanism, you will need to implement a new attention layer in vLLM.
+    目前，vLLM 支持基本的多头注意力机制及其带旋转位置嵌入的变体。
+    如果您的模型采用不同的注意力机制，则需要在 vLLM 中实现新的注意力层。
 
 
-3. (Optional) Implement tensor parallelism support
+3. （可选）实现张量并行支持
 --------------------------------------------------
 
-If your model is too large to fit into a single GPU, you can use tensor parallelism to manage it.
-To do this, substitute your model's linear and embedding layers with their tensor-parallel versions.
-For the embedding layer, you can simply replace :code:`nn.Embedding` with :code:`VocabParallelEmbedding`.
-When it comes to the linear layers, you should use either :code:`RowParallelLinear` or :code:`ColumnParallelLinear`.
-Typically, :code:`ColumnParallelLinear` is used for QKV linear layers and the first linear layers of the MLP blocks.
-For the remaining linear layers, :code:`RowParallelLinear` is used.
+如果您的模型太大，无法放入单个 GPU，则可以使用张量并行来管理它。
+为此，将模型的线性和嵌入层替换为其张量并行版本。
+对于嵌入层，您可以简单地将 :code:`nn.Embedding` 替换为 :code:`VocabParallelEmbedding`。
+对于线性层，您应该使用 :code:`RowParallelLinear` 或 :code:`ColumnParallelLinear`。
+通常，:code:`ColumnParallelLinear` 用于 QKV 线性层和 MLP 块的第一个线性层。
+对于其余线性层，使用 :code:`RowParallelLinear`。
 
 
-4. Implement the weight loading logic
+4. 实现权重加载逻辑
 -------------------------------------
 
-You now need to implement the :code:`load_weights` method in your :code:`*ForCausalLM` class.
-This method should load the weights from the HuggingFace's checkpoint file and assign them to the corresponding layers in your model.
-While the process is straightforward for most layers, the tensor-parallel layers necessitate some additional care as their weights should be partitioned to multiple GPUs.
+您现在需要在 :code:`*ForCausalLM` 类中实现 :code:`load_weights` 方法。
+此方法应从 HuggingFace 的检查点文件加载权重并将其分配给模型中的相应层。
+虽然对于大多数层来说这个过程很简单，但张量并行层需要一些额外的注意，因为它们的权重应该被分割到多个 GPU 上。
 
 
-5. Register your model
+5. 注册您的模型
 ----------------------
 
-Finally, include your :code:`*ForCausalLM` class in `vllm/model_executor/models/__init__.py <https://github.com/vllm-project/vllm/blob/main/vllm/model_executor/models/__init__.py>`_ and register it to the :code:`_MODEL_REGISTRY` in `vllm/model_executor/model_loader.py <https://github.com/vllm-project/vllm/blob/main/vllm/model_executor/model_loader.py>`_.
+最后，将您的 :code:`*ForCausalLM` 类包含在 `vllm/model_executor/models/__init__.py <https://github.com/vllm-project/vllm/blob/main/vllm/model_executor/models/__init__.py>`_ 中，并将其注册到 `vllm/model_executor/model_loader.py <https://github.com/vllm-project/vllm/blob/main/vllm/model_executor/model_loader.py>`_ 中的 :code:`_MODEL_REGISTRY`。

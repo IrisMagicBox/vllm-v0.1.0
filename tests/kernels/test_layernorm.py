@@ -5,6 +5,7 @@ from vllm import layernorm_ops
 
 
 class RefRMSNorm(nn.Module):
+    """参考实现：RMS归一化层"""
 
     def __init__(self, hidden_size, eps=1e-6):
         super().__init__()
@@ -27,6 +28,7 @@ def run_rms_norm(
     hidden_size: int,
     dtype: torch.dtype,
 ) -> None:
+    """运行RMS归一化操作的测试"""
     x = torch.randn(num_tokens, hidden_size, dtype=dtype, device='cuda')
     ref = RefRMSNorm(hidden_size).to(dtype).cuda()
 
@@ -42,10 +44,11 @@ def run_rms_norm(
 
 
 def test_rms_norm() -> None:
+    """测试RMS归一化操作的函数"""
     for dtype in [torch.half, torch.bfloat16, torch.float]:
         for num_tokens in [7, 128, 2048]:
             for hidden_size in [13, 64, 1024, 5120]:
-                print(f'Testing RMS kernel with dtype={dtype}, num_tokens='
+                print(f'测试RMS内核 dtype={dtype}, num_tokens='
                       f'{num_tokens}, hidden_size={hidden_size}')
                 run_rms_norm(
                     num_tokens=num_tokens,

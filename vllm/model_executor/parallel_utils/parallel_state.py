@@ -2,46 +2,44 @@
 # Adapted from https://github.com/NVIDIA/Megatron-LM/blob/main/megatron/core/parallel_state.py
 # Copyright (c) 2022, NVIDIA CORPORATION. All rights reserved.
 
-"""Model and data parallel groups."""
+"""模型和数据并行组。"""
 
 import torch
 from typing import Optional
 
-# Intra-layer model parallel group that the current rank belongs to.
+# 当前排名所属的层内模型并行组。
 _TENSOR_MODEL_PARALLEL_GROUP = None
-# Inter-layer model parallel group that the current rank belongs to.
+# 当前排名所属的层间模型并行组。
 _PIPELINE_MODEL_PARALLEL_GROUP = None
-# Model parallel group (both intra- and pipeline) that the current rank belongs to.
+# 当前排名所属的模型并行组（包括层内和流水线）。
 _MODEL_PARALLEL_GROUP = None
-# Embedding group.
+# 嵌入组。
 _EMBEDDING_GROUP = None
-# Position embedding group.
+# 位置嵌入组。
 _POSITION_EMBEDDING_GROUP = None
-# Data parallel group that the current rank belongs to.
+# 当前排名所属的数据并行组。
 _DATA_PARALLEL_GROUP = None
 
 _VIRTUAL_PIPELINE_MODEL_PARALLEL_RANK = None
 _VIRTUAL_PIPELINE_MODEL_PARALLEL_WORLD_SIZE = None
 _PIPELINE_MODEL_PARALLEL_SPLIT_RANK = None
 
-# These values enable us to change the mpu sizes on the fly.
+# 这些值使我们能够动态更改 mpu 大小。
 _MPU_TENSOR_MODEL_PARALLEL_WORLD_SIZE = None
 _MPU_PIPELINE_MODEL_PARALLEL_WORLD_SIZE = None
 _MPU_TENSOR_MODEL_PARALLEL_RANK = None
 _MPU_PIPELINE_MODEL_PARALLEL_RANK = None
 
-# A list of ranks that have a copy of the embedding.
+# 拥有嵌入副本的排名列表。
 _EMBEDDING_GLOBAL_RANKS = None
 
-# A list of ranks that have a copy of the position embedding.
+# 拥有位置嵌入副本的排名列表。
 _POSITION_EMBEDDING_GLOBAL_RANKS = None
 
-# A list of global ranks for each pipeline group to ease calculation of the source
-# rank when broadcasting from the first or last pipeline stage.
+# 每个流水线组的全局排名列表，便于在从第一个或最后一个流水线阶段广播时计算源排名。
 _PIPELINE_GLOBAL_RANKS = None
 
-# A list of global ranks for each data parallel group to ease calculation of the source
-# rank when broadcasting weights from src to all other data parallel ranks
+# 每个数据并行组的全局排名列表，便于在从源到所有其他数据并行排名广播权重时计算源排名。
 _DATA_PARALLEL_GLOBAL_RANKS = None
 
 _ALL_REDUCE_LAUNCHER: Optional['GraphAllReduce'] = None
@@ -53,40 +51,36 @@ def initialize_model_parallel(
     pipeline_model_parallel_split_rank: Optional[int] = None,
 ) -> None:
     """
-    Initialize model data parallel groups.
+    初始化模型数据并行组。
 
-    Arguments:
-        tensor_model_parallel_size: number of GPUs used for tensor model parallelism.
-        pipeline_model_parallel_size: number of GPUs used for pipeline model parallelism.
-        virtual_pipeline_model_parallel_size: number of virtual stages (interleaved
-                                              pipeline).
-        pipeline_model_parallel_split_rank: for models with both encoder and decoder,
-                                            rank in pipeline with split point.
+    参数:
+        tensor_model_parallel_size: 用于张量模型并行的 GPU 数量。
+        pipeline_model_parallel_size: 用于流水线模型并行的 GPU 数量。
+        virtual_pipeline_model_parallel_size: 虚拟阶段数（交错流水线）。
+        pipeline_model_parallel_split_rank: 对于同时具有编码器和解码器的模型，
+                                            流水线中分割点的排名。
 
-    Let's say we have a total of 16 GPUs denoted by g0 ... g15 and we
-    use 2 GPUs to parallelize the model tensor, and 4 GPUs to parallelize
-    the model pipeline. The present function will
-    create 8 tensor model-parallel groups, 4 pipeline model-parallel groups
-    and 8 data-parallel groups as:
-        8 data_parallel groups:
+    假设我们总共有16个GPU，用g0...g15表示，我们使用2个GPU来并行化模型张量，
+    使用4个GPU来并行化模型流水线。此函数将创建8个张量模型并行组，
+    4个流水线模型并行组和8个数据并行组：
+        8个数据并行组：
             [g0, g2], [g1, g3], [g4, g6], [g5, g7], [g8, g10], [g9, g11], [g12, g14], [g13, g15]
-        8 tensor model-parallel groups:
+        8个张量模型并行组：
             [g0, g1], [g2, g3], [g4, g5], [g6, g7], [g8, g9], [g10, g11], [g12, g13], [g14, g15]
-        4 pipeline model-parallel groups:
+        4个流水线模型并行组：
             [g0, g4, g8, g12], [g1, g5, g9, g13], [g2, g6, g10, g14], [g3, g7, g11, g15]
-    Note that for efficiency, the caller should make sure adjacent ranks
-    are on the same DGX box. For example if we are using 2 DGX-1 boxes
-    with a total of 16 GPUs, rank 0 to 7 belong to the first box and
-    ranks 8 to 15 belong to the second box.
+    为提高效率，请注意调用者应确保相邻排名位于同一DGX服务器上。
+    例如，如果我们使用2个DGX-1服务器，总共16个GPU，排名0到7属于第一个服务器，
+    排名8到15属于第二个服务器。
     """
-    # Get world size and rank. Ensure some consistencies.
+    # 获取世界大小和排名。确保一些一致性。
     assert torch.distributed.is_initialized()
     world_size: int = torch.distributed.get_world_size()
 
     if world_size % (tensor_model_parallel_size * pipeline_model_parallel_size) != 0:
         raise RuntimeError(
-            f"world_size ({world_size}) is not divisible by tensor_model_parallel_size "
-            f"({tensor_model_parallel_size}) x pipeline_model_parallel_size ({pipeline_model_parallel_size})"
+            f"world_size ({world_size}) 不能被 tensor_model_parallel_size "
+            f"({tensor_model_parallel_size}) x pipeline_model_parallel_size ({pipeline_model_parallel_size}) 整除"
         )
 
     data_parallel_size: int = world_size // (tensor_model_parallel_size *
@@ -98,8 +92,7 @@ def initialize_model_parallel(
 
     if virtual_pipeline_model_parallel_size is not None:
         if not pipeline_model_parallel_size > 2:
-            raise RuntimeError("pipeline-model-parallel size should be greater than 2 with "
-                               "interleaved schedule")
+            raise RuntimeError("流水线模型并行大小在交错调度时应大于2")
         global _VIRTUAL_PIPELINE_MODEL_PARALLEL_RANK
         global _VIRTUAL_PIPELINE_MODEL_PARALLEL_WORLD_SIZE
         _VIRTUAL_PIPELINE_MODEL_PARALLEL_RANK = 0
@@ -111,10 +104,10 @@ def initialize_model_parallel(
 
     rank = torch.distributed.get_rank()
 
-    # Build the data-parallel groups.
+    # 构建数据并行组。
     global _DATA_PARALLEL_GROUP
     global _DATA_PARALLEL_GLOBAL_RANKS
-    assert _DATA_PARALLEL_GROUP is None, 'data parallel group is already initialized'
+    assert _DATA_PARALLEL_GROUP is None, '数据并行组已初始化'
     all_data_parallel_group_ranks = []
     for i in range(pipeline_model_parallel_size):
         start_rank = i * num_pipeline_model_parallel_groups
@@ -127,9 +120,9 @@ def initialize_model_parallel(
                 _DATA_PARALLEL_GROUP = group
                 _DATA_PARALLEL_GLOBAL_RANKS = ranks
 
-    # Build the model-parallel groups.
+    # 构建模型并行组。
     global _MODEL_PARALLEL_GROUP
-    assert _MODEL_PARALLEL_GROUP is None, 'model parallel group is already initialized'
+    assert _MODEL_PARALLEL_GROUP is None, '模型并行组已初始化'
     for i in range(data_parallel_size):
         ranks = [data_parallel_group_ranks[i]
                  for data_parallel_group_ranks in all_data_parallel_group_ranks]
@@ -137,10 +130,10 @@ def initialize_model_parallel(
         if rank in ranks:
             _MODEL_PARALLEL_GROUP = group
 
-    # Build the tensor model-parallel groups.
+    # 构建张量模型并行组。
     global _TENSOR_MODEL_PARALLEL_GROUP
     assert _TENSOR_MODEL_PARALLEL_GROUP is None, \
-        'tensor model parallel group is already initialized'
+        '张量模型并行组已初始化'
     for i in range(num_tensor_model_parallel_groups):
         ranks = range(i * tensor_model_parallel_size,
                       (i + 1) * tensor_model_parallel_size)
@@ -148,27 +141,26 @@ def initialize_model_parallel(
         if rank in ranks:
             _TENSOR_MODEL_PARALLEL_GROUP = group
 
-    # Build the pipeline model-parallel groups and embedding groups
-    # (first and last rank in each pipeline model-parallel group).
+    # 构建流水线模型并行组和嵌入组
+    # （每个流水线模型并行组的第一个和最后一个排名）。
     global _PIPELINE_MODEL_PARALLEL_GROUP
     global _PIPELINE_GLOBAL_RANKS
     assert _PIPELINE_MODEL_PARALLEL_GROUP is None, \
-        'pipeline model parallel group is already initialized'
+        '流水线模型并行组已初始化'
     global _EMBEDDING_GROUP
     global _EMBEDDING_GLOBAL_RANKS
-    assert _EMBEDDING_GROUP is None, 'embedding group is already initialized'
+    assert _EMBEDDING_GROUP is None, '嵌入组已初始化'
     global _POSITION_EMBEDDING_GROUP
     global _POSITION_EMBEDDING_GLOBAL_RANKS
     assert _POSITION_EMBEDDING_GROUP is None, \
-        'position embedding group is already initialized'
+        '位置嵌入组已初始化'
     for i in range(num_pipeline_model_parallel_groups):
         ranks = range(i, world_size, num_pipeline_model_parallel_groups)
         group = torch.distributed.new_group(ranks)
         if rank in ranks:
             _PIPELINE_MODEL_PARALLEL_GROUP = group
             _PIPELINE_GLOBAL_RANKS = ranks
-        # Setup embedding group (to exchange gradients between
-        # first and last stages).
+        # 设置嵌入组（在第一阶段和最后阶段之间交换梯度）。
         if len(ranks) > 1:
             embedding_ranks = [ranks[0], ranks[-1]]
             position_embedding_ranks = [ranks[0]]
@@ -211,7 +203,7 @@ def initialize_all_reduce_launcher(
     )
 
 def model_parallel_is_initialized():
-    """Check if model and data parallel groups are initialized."""
+    """检查模型和数据并行组是否已初始化。"""
     if _TENSOR_MODEL_PARALLEL_GROUP is None or \
         _PIPELINE_MODEL_PARALLEL_GROUP is None or \
         _DATA_PARALLEL_GROUP is None:
@@ -220,61 +212,61 @@ def model_parallel_is_initialized():
 
 
 def get_model_parallel_group():
-    """Get the model parallel group the caller rank belongs to."""
+    """获取调用者排名所属的模型并行组。"""
     assert _MODEL_PARALLEL_GROUP is not None, \
-        'model parallel group is not initialized'
+        '模型并行组未初始化'
     return _MODEL_PARALLEL_GROUP
 
 
 def get_tensor_model_parallel_group():
-    """Get the tensor model parallel group the caller rank belongs to."""
+    """获取调用者排名所属的张量模型并行组。"""
     assert _TENSOR_MODEL_PARALLEL_GROUP is not None, \
-        'intra_layer_model parallel group is not initialized'
+        '层内模型并行组未初始化'
     return _TENSOR_MODEL_PARALLEL_GROUP
 
 
 def get_pipeline_model_parallel_group():
-    """Get the pipeline model parallel group the caller rank belongs to."""
+    """获取调用者排名所属的流水线模型并行组。"""
     assert _PIPELINE_MODEL_PARALLEL_GROUP is not None, \
-        'pipeline_model parallel group is not initialized'
+        '流水线模型并行组未初始化'
     return _PIPELINE_MODEL_PARALLEL_GROUP
 
 
 def get_data_parallel_group():
-    """Get the data parallel group the caller rank belongs to."""
+    """获取调用者排名所属的数据并行组。"""
     assert _DATA_PARALLEL_GROUP is not None, \
-        'data parallel group is not initialized'
+        '数据并行组未初始化'
     return _DATA_PARALLEL_GROUP
 
 
 def get_embedding_group():
-    """Get the embedding group the caller rank belongs to."""
+    """获取调用者排名所属的嵌入组。"""
     assert _EMBEDDING_GROUP is not None, \
-        'embedding group is not initialized'
+        '嵌入组未初始化'
     return _EMBEDDING_GROUP
 
 
 def get_position_embedding_group():
-    """Get the position embedding group the caller rank belongs to."""
+    """获取调用者排名所属的位置嵌入组。"""
     assert _POSITION_EMBEDDING_GROUP is not None, \
-        'position embedding group is not initialized'
+        '位置嵌入组未初始化'
     return _POSITION_EMBEDDING_GROUP
 
 
 def set_tensor_model_parallel_world_size(world_size):
-    """Set the tensor model parallel size"""
+    """设置张量模型并行大小"""
     global _MPU_TENSOR_MODEL_PARALLEL_WORLD_SIZE
     _MPU_TENSOR_MODEL_PARALLEL_WORLD_SIZE = world_size
 
 
 def set_pipeline_model_parallel_world_size(world_size):
-    """Set the pipeline model parallel size"""
+    """设置流水线模型并行大小"""
     global _MPU_PIPELINE_MODEL_PARALLEL_WORLD_SIZE
     _MPU_PIPELINE_MODEL_PARALLEL_WORLD_SIZE = world_size
 
 
 def get_tensor_model_parallel_world_size():
-    """Return world size for the tensor model parallel group."""
+    """返回张量模型并行组的世界大小。"""
     global _MPU_TENSOR_MODEL_PARALLEL_WORLD_SIZE
     if _MPU_TENSOR_MODEL_PARALLEL_WORLD_SIZE is not None:
         return _MPU_TENSOR_MODEL_PARALLEL_WORLD_SIZE
@@ -282,7 +274,7 @@ def get_tensor_model_parallel_world_size():
 
 
 def get_pipeline_model_parallel_world_size():
-    """Return world size for the pipeline model parallel group."""
+    """返回流水线模型并行组的世界大小。"""
     global _MPU_PIPELINE_MODEL_PARALLEL_WORLD_SIZE
     if _MPU_PIPELINE_MODEL_PARALLEL_WORLD_SIZE is not None:
         return _MPU_PIPELINE_MODEL_PARALLEL_WORLD_SIZE
@@ -290,25 +282,25 @@ def get_pipeline_model_parallel_world_size():
 
 
 def set_tensor_model_parallel_rank(rank):
-    """Set tensor model parallel rank."""
+    """设置张量模型并行排名。"""
     global _MPU_TENSOR_MODEL_PARALLEL_RANK
     _MPU_TENSOR_MODEL_PARALLEL_RANK = rank
 
 
 def set_pipeline_model_parallel_rank(rank):
-    """Set pipeline model parallel rank."""
+    """设置流水线模型并行排名。"""
     global _MPU_PIPELINE_MODEL_PARALLEL_RANK
     _MPU_PIPELINE_MODEL_PARALLEL_RANK = rank
 
 
 def set_pipeline_model_parallel_split_rank(rank):
-    """Set pipeline model parallel split rank."""
+    """设置流水线模型并行分割排名。"""
     global _MPU_PIPELINE_MODEL_PARALLEL_SPLIT_RANK
     _MPU_PIPELINE_MODEL_PARALLEL_SPLIT_RANK = rank
 
 
 def get_tensor_model_parallel_rank():
-    """Return my rank for the tensor model parallel group."""
+    """返回张量模型并行组的我的排名。"""
     global _MPU_TENSOR_MODEL_PARALLEL_RANK
     if _MPU_TENSOR_MODEL_PARALLEL_RANK is not None:
         return _MPU_TENSOR_MODEL_PARALLEL_RANK
@@ -316,16 +308,15 @@ def get_tensor_model_parallel_rank():
 
 
 def get_pipeline_model_parallel_rank():
-    """Return my rank for the pipeline model parallel group."""
+    """返回流水线模型并行组的我的排名。"""
     global _MPU_PIPELINE_MODEL_PARALLEL_RANK
     if _MPU_PIPELINE_MODEL_PARALLEL_RANK is not None:
         return _MPU_PIPELINE_MODEL_PARALLEL_RANK
     return torch.distributed.get_rank(group=get_pipeline_model_parallel_group())
 
 
-
 def is_pipeline_first_stage(ignore_virtual=False):
-    """Return True if in the first pipeline model-parallel stage, False otherwise."""
+    """如果在第一个流水线模型并行阶段，则返回True，否则返回False。"""
     if not ignore_virtual:
         if get_virtual_pipeline_model_parallel_world_size() is not None and \
             get_virtual_pipeline_model_parallel_rank() != 0:
@@ -334,7 +325,7 @@ def is_pipeline_first_stage(ignore_virtual=False):
 
 
 def is_pipeline_last_stage(ignore_virtual=False):
-    """Return True if in the last pipeline model-parallel stage, False otherwise."""
+    """如果在最后一个流水线模型并行阶段，则返回True，否则返回False。"""
     if not ignore_virtual:
         virtual_pipeline_model_parallel_world_size = \
             get_virtual_pipeline_model_parallel_world_size()
@@ -347,7 +338,7 @@ def is_pipeline_last_stage(ignore_virtual=False):
 
 
 def is_rank_in_embedding_group(ignore_virtual=False):
-    """Return true if current rank is in embedding group, False otherwise."""
+    """如果当前排名在嵌入组中，则返回true，否则返回False。"""
     rank = torch.distributed.get_rank()
     global _EMBEDDING_GLOBAL_RANKS
     if ignore_virtual:
@@ -363,15 +354,15 @@ def is_rank_in_embedding_group(ignore_virtual=False):
 
 
 def is_rank_in_position_embedding_group():
-    """Return true if current rank is in position embedding group, False otherwise."""
+    """如果当前排名在位置嵌入组中，则返回true，否则返回False。"""
     rank = torch.distributed.get_rank()
     global _POSITION_EMBEDDING_GLOBAL_RANKS
     return rank in _POSITION_EMBEDDING_GLOBAL_RANKS
 
 
 def is_pipeline_stage_before_split(rank=None):
-    """Return True if pipeline stage executes encoder block for a model
-    with both encoder and decoder."""
+    """如果流水线阶段执行编码器块（对于同时具有编码器和解码器的模型），
+    则返回True。"""
     if get_pipeline_model_parallel_world_size() == 1:
         return True
     if rank is None:
@@ -385,8 +376,8 @@ def is_pipeline_stage_before_split(rank=None):
 
 
 def is_pipeline_stage_after_split(rank=None):
-    """Return True if pipeline stage executes decoder block for a model
-    with both encoder and decoder."""
+    """如果流水线阶段执行解码器块（对于同时具有编码器和解码器的模型），
+    则返回True。"""
     if get_pipeline_model_parallel_world_size() == 1:
         return True
     if rank is None:
@@ -400,97 +391,92 @@ def is_pipeline_stage_after_split(rank=None):
 
 
 def is_pipeline_stage_at_split():
-    """Return true if pipeline stage executes decoder block and next
-    stage executes encoder block for a model with both encoder and
-    decoder."""
+    """如果流水线阶段执行解码器块且下一阶段执行编码器块（对于同时具有编码器和
+    解码器的模型），则返回true。"""
     rank = get_pipeline_model_parallel_rank()
     return is_pipeline_stage_before_split(rank) and \
             is_pipeline_stage_after_split(rank+1)
 
 
 def get_virtual_pipeline_model_parallel_rank():
-    """Return the virtual pipeline-parallel rank."""
+    """返回虚拟流水线并行排名。"""
     global _VIRTUAL_PIPELINE_MODEL_PARALLEL_RANK
     return _VIRTUAL_PIPELINE_MODEL_PARALLEL_RANK
 
 
 def set_virtual_pipeline_model_parallel_rank(rank):
-    """Set the virtual pipeline-parallel rank."""
+    """设置虚拟流水线并行排名。"""
     global _VIRTUAL_PIPELINE_MODEL_PARALLEL_RANK
     _VIRTUAL_PIPELINE_MODEL_PARALLEL_RANK = rank
 
 
 def get_virtual_pipeline_model_parallel_world_size():
-    """Return the virtual pipeline-parallel world size."""
+    """返回虚拟流水线并行世界大小。"""
     global _VIRTUAL_PIPELINE_MODEL_PARALLEL_WORLD_SIZE
     return _VIRTUAL_PIPELINE_MODEL_PARALLEL_WORLD_SIZE
 
 
 def get_tensor_model_parallel_src_rank():
-    """Calculate the global rank corresponding to the first local rank
-    in the tensor model parallel group."""
+    """计算张量模型并行组中第一个本地排名对应的全局排名。"""
     global_rank = torch.distributed.get_rank()
     local_world_size = get_tensor_model_parallel_world_size()
     return (global_rank // local_world_size) * local_world_size
 
 
 def get_data_parallel_src_rank():
-    """Calculate the global rank corresponding to the first local rank
-    in the data parallel group."""
+    """计算数据并行组中第一个本地排名对应的全局排名。"""
     assert _DATA_PARALLEL_GLOBAL_RANKS is not None, \
-        "Data parallel group is not initialized"
+        "数据并行组未初始化"
     return _DATA_PARALLEL_GLOBAL_RANKS[0]
 
 
 def get_pipeline_model_parallel_first_rank():
-    """Return the global rank of the first process in the pipeline for the
-    current tensor parallel group"""
+    """返回当前张量并行组在流水线中的第一个进程的全局排名"""
     assert _PIPELINE_GLOBAL_RANKS is not None, \
-        "Pipeline parallel group is not initialized"
+        "流水线并行组未初始化"
     return _PIPELINE_GLOBAL_RANKS[0]
 
 
 def get_pipeline_model_parallel_last_rank():
-    """Return the global rank of the last process in the pipeline for the
-    current tensor parallel group"""
+    """返回当前张量并行组在流水线中的最后一个进程的全局排名"""
     assert _PIPELINE_GLOBAL_RANKS is not None, \
-        "Pipeline parallel group is not initialized"
+        "流水线并行组未初始化"
     last_rank_local = get_pipeline_model_parallel_world_size() - 1
     return _PIPELINE_GLOBAL_RANKS[last_rank_local]
 
 def get_pipeline_model_parallel_next_rank():
-    """Return the global rank that follows the caller in the pipeline"""
+    """返回流水线中跟随调用者的全局排名"""
     assert _PIPELINE_GLOBAL_RANKS is not None, \
-        "Pipeline parallel group is not initialized"
+        "流水线并行组未初始化"
     rank_in_pipeline = get_pipeline_model_parallel_rank()
     world_size = get_pipeline_model_parallel_world_size()
     return _PIPELINE_GLOBAL_RANKS[(rank_in_pipeline + 1) % world_size]
 
 
 def get_pipeline_model_parallel_prev_rank():
-    """Return the global rank that preceeds the caller in the pipeline"""
+    """返回流水线中在调用者之前的全局排名"""
     assert _PIPELINE_GLOBAL_RANKS is not None, \
-        "Pipeline parallel group is not initialized"
+        "流水线并行组未初始化"
     rank_in_pipeline = get_pipeline_model_parallel_rank()
     world_size = get_pipeline_model_parallel_world_size()
     return _PIPELINE_GLOBAL_RANKS[(rank_in_pipeline - 1) % world_size]
 
 
 def get_data_parallel_world_size():
-    """Return world size for the data parallel group."""
+    """返回数据并行组的世界大小。"""
     return torch.distributed.get_world_size(group=get_data_parallel_group())
 
 
 def get_data_parallel_rank():
-    """Return my rank for the data parallel group."""
+    """返回数据并行组的我的排名。"""
     return torch.distributed.get_rank(group=get_data_parallel_group())
 
 def get_all_reduce_launcher() -> 'GraphAllReduce':
-    assert _ALL_REDUCE_LAUNCHER is not None, 'all reduce launcher is not initialized'
+    assert _ALL_REDUCE_LAUNCHER is not None, 'all reduce启动器未初始化'
     return _ALL_REDUCE_LAUNCHER
 
 def destroy_model_parallel():
-    """Set the groups to none."""
+    """将组设置为none。"""
     global _MODEL_PARALLEL_GROUP
     _MODEL_PARALLEL_GROUP = None
     global _TENSOR_MODEL_PARALLEL_GROUP
@@ -541,18 +527,18 @@ class GraphAllReduce:
             device='cuda',
         )
 
-        # Build graphs for different number of tokens.
+        # 为不同数量的token构建图。
         if not self.disable_graph:
             self.graphs = {}
             for num_tokens in range(8, max_num_tokens + 1, 8):
                 self.graphs[num_tokens] = self._build_graph(num_tokens)
 
     def _build_graph(self, num_tokens: int) -> torch.cuda.CUDAGraph:
-        # Warm up.
+        # 预热。
         torch.distributed.all_reduce(self.buffer[:num_tokens], group=self.group)
         torch.cuda.synchronize()
 
-        # Build graph.
+        # 构建图。
         graph = torch.cuda.CUDAGraph()
         with torch.cuda.graph(graph):
             torch.distributed.all_reduce(
@@ -561,7 +547,7 @@ class GraphAllReduce:
         return graph
 
     def launch(self, x: torch.Tensor) -> torch.Tensor:
-        # NOTE: x must be a slice of self.buffer.
+        # 注意：x必须是self.buffer的切片。
         num_tokens = x.shape[0]
         if self.disable_graph:
             torch.distributed.all_reduce(x, group=self.group)

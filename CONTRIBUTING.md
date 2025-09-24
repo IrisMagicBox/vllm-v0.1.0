@@ -1,74 +1,74 @@
-# Contributing to vLLM
+# 为 vLLM 做出贡献
 
-Thank you for your interest in contributing to vLLM!
-Our community is open to everyone and welcomes all kinds of contributions, no matter how small or large.
-There are several ways you can contribute to the project:
+感谢您对为 vLLM 做出贡献的兴趣！
+我们的社区对所有人开放，并欢迎各种形式的贡献，无论大小。
+您可以通过以下几种方式为项目做出贡献：
 
-- Identify and report any issues or bugs.
-- Request or add a new model.
-- Suggest or implement new features.
+- 发现并报告任何问题或错误。
+- 请求或添加新模型。
+- 建议或实现新功能。
 
-However, remember that contributions aren't just about code.
-We believe in the power of community support; thus, answering queries, assisting others, and enhancing the documentation are highly regarded and beneficial contributions.
+不过，请记住贡献不仅仅是关于代码。
+我们相信社区支持的力量；因此，回答问题、帮助他人和改进文档都是备受推崇和有益的贡献。
 
-Finally, one of the most impactful ways to support us is by raising awareness about vLLM.
-Talk about it in your blog posts, highlighting how it's driving your incredible projects.
-Express your support on Twitter if vLLM aids you, or simply offer your appreciation by starring our repository.
+最后，支持我们的最具影响力方式之一是提高人们对 vLLM 的认知。
+在您的博客文章中谈论它，突出说明它是如何推动您令人难以置信的项目的。
+如果您觉得 vLLM 对您有所帮助，请在 Twitter 上表示支持，或者通过给我们的仓库点赞来表达您的赞赏。
 
 
-## Setup for development
+## 开发设置
 
-### Build from source
+### 从源代码构建
 
 ```bash
 pip install -r requirements.txt
-pip install -e .  # This may take several minutes.
+pip install -e .  # 这可能需要几分钟时间。
 ```
 
-### Testing
+### 测试
 
 ```bash
 pip install -r requirements-dev.txt
 
-# Static type checking
+# 静态类型检查
 mypy
-# Unit tests
+# 单元测试
 pytest tests/
 ```
-**Note:** Currently, the repository does not pass the mypy tests.
+**注意：** 目前，仓库无法通过 mypy 测试。
 
 
-## Contributing Guidelines
+## 贡献指南
 
-### Issue Reporting
+### 问题报告
 
-If you encounter a bug or have a feature request, please check our issues page first to see if someone else has already reported it.
-If not, please file a new issue, providing as much relevant information as possible.
+如果您遇到错误或有功能请求，请首先查看我们的问题页面，看看是否有人已经报告过。
+如果没有，请提交一个新问题，并提供尽可能多的相关信息。
 
-### Coding Style Guide
+### 编码风格指南
 
-In general, we adhere to [Google Python style guide](https://google.github.io/styleguide/pyguide.html) and [Google C++ style guide](https://google.github.io/styleguide/cppguide.html).
+通常，我们遵循 [Google Python 风格指南](https://google.github.io/styleguide/pyguide.html) 和 [Google C++ 风格指南](https://google.github.io/styleguide/cppguide.html)。
 
-### Pull Requests
+### 拉取请求
 
-When submitting a pull request:
+提交拉取请求时：
 
-1. Make sure your code has been rebased on top of the latest commit on the main branch.
-2. Include a detailed description of the changes in the pull request.
-Explain why you made the changes you did.
-If your pull request fixes an open issue, please include a reference to it in the description.
+1. 确保您的代码已基于主分支上的最新提交进行了变基。
+2. 在拉取请求中包含更改的详细描述。
+解释您为何进行这些更改。
+如果您的拉取请求修复了开放的问题，请在描述中包含对该问题的引用。
 
-### Code Reviews
+### 代码审查
 
-All submissions, including submissions by project members, require a code review.
-To make the review process as smooth as possible, please:
+所有提交（包括项目成员的提交）都需要进行代码审查。
+为了使审查过程尽可能顺利，请：
 
-1. Keep your changes as concise as possible.
-If your pull request involves multiple unrelated changes, consider splitting it into separate pull requests.
-2. Respond to all comments within a reasonable time frame.
-If a comment isn't clear or you disagree with a suggestion, feel free to ask for clarification or discuss the suggestion.
+1. 尽可能保持您的更改简洁。
+如果您的拉取请求包含多个不相关的更改，请考虑将其拆分为单独的拉取请求。
+2. 在合理的时间范围内回复所有评论。
+如果某个评论不清楚或您不同意某个建议，请随时要求澄清或讨论该建议。
 
-### Thank You
+### 谢谢
 
-Finally, thank you for taking the time to read these guidelines and for your interest in contributing to vLLM.
-Your contributions make vLLM a great tool for everyone!
+最后，感谢您花时间阅读这些指南，并感谢您对为 vLLM 做出贡献的兴趣。
+您的贡献使 vLLM 成为每个人的伟大工具！

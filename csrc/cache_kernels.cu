@@ -31,7 +31,7 @@ void swap_blocks(
 
   const int64_t block_size_in_bytes = src.element_size() * src[0].numel();
   const cudaStream_t stream = at::cuda::getCurrentCUDAStream();
-  // NOTE(woosuk): This can be slow if the number of blocks is large.
+  // 注意(woosuk): 如果块的数量很大，这可能会很慢。
   for (const auto& pair : block_mapping) {
     int64_t src_block_number = pair.first;
     int64_t dst_block_number = pair.second;
@@ -48,7 +48,7 @@ void swap_blocks(
 
 namespace vllm {
 
-// Grid: (num_layers, num_pairs)
+// 网格: (num_layers, num_pairs)
 template<typename scalar_t>
 __global__ void copy_blocks_kernel(
   int64_t* key_cache_ptrs,
@@ -91,15 +91,15 @@ void copy_blocks(
   torch::Device cache_device = key_caches[0].device();
   TORCH_CHECK(cache_device.is_cuda());
 
-  // Create data structures for the kernel.
-  // Create an array of pointers to the key and value caches.
+  // 为内核创建数据结构。
+  // 创建指向键和值缓存的指针数组。
   int64_t key_cache_ptrs[num_layers];
   int64_t value_cache_ptrs[num_layers];
   for (int layer_idx = 0; layer_idx < num_layers; ++layer_idx) {
     key_cache_ptrs[layer_idx] = reinterpret_cast<int64_t>(key_caches[layer_idx].data_ptr());
     value_cache_ptrs[layer_idx] = reinterpret_cast<int64_t>(value_caches[layer_idx].data_ptr());
   }
-  // Create block mapping array.
+  // 创建块映射数组。
   std::vector<int> block_mapping_vec;
   for (const auto& pair : block_mapping) {
     int src_block_number = pair.first;
@@ -111,8 +111,8 @@ void copy_blocks(
   int* block_mapping_array = block_mapping_vec.data();
   int num_pairs = block_mapping_vec.size() / 2;
 
-  // Move the data structures to the GPU.
-  // NOTE: This synchronizes the CPU and GPU.
+  // 将数据结构移到GPU上。
+  // 注意: 这会同步CPU和GPU。
   torch::Tensor key_cache_ptrs_tensor = torch::from_blob(
     key_cache_ptrs, {num_layers}, torch::kInt64).to(cache_device);
   torch::Tensor value_cache_ptrs_tensor = torch::from_blob(
@@ -120,7 +120,7 @@ void copy_blocks(
   torch::Tensor block_mapping_tensor = torch::from_blob(
     block_mapping_array, {2 * num_pairs}, torch::kInt).to(cache_device);
 
-  // Launch the kernel.
+  // 启动内核。
   const int numel_per_block = key_caches[0][0].numel();
   dim3 grid(num_layers, num_pairs);
   dim3 block(std::min(1024, numel_per_block));
@@ -225,7 +225,7 @@ void reshape_and_cache(
 
 namespace vllm {
 
-// Grid: (num_blocks, block_size).
+// 网格: (num_blocks, block_size)。
 template<typename scalar_t>
 __global__ void gather_cached_kv_kernel(
   scalar_t* __restrict__ key,             // [num_tokens, [stride], num_heads, head_size]
@@ -251,7 +251,7 @@ __global__ void gather_cached_kv_kernel(
   
       const int head_idx = i / head_size;
       const int head_offset = i % head_size;
-      const int x_idx = head_offset / x;  // the offset of the [head_size/x] dimension
+      const int x_idx = head_offset / x;  // [head_size/x] 维度的偏移量
       const int x_offset = head_offset % x;
   
       const int src_key_idx = block_idx * num_heads * (head_size / x) * block_size * x
@@ -289,7 +289,7 @@ __global__ void gather_cached_kv_kernel_optimized(
     const int block_offset = slot_idx % block_size;
 
     const int dim = num_heads * head_size;
-    assert(dim % 4 == 0);  // this is true for known use cases
+    assert(dim % 4 == 0);  // 对于已知用例这是正确的
     const int unroll_factor = 4;
     const int unrolled_dim = dim / unroll_factor;
 

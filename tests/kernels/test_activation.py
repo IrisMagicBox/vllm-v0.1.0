@@ -5,6 +5,7 @@ from vllm import activation_ops
 
 
 def ref_silu_and_mul(x: torch.Tensor) -> torch.Tensor:
+    """参考实现：SiLU激活函数与乘法操作的组合"""
     x1, x2 = x.chunk(chunks=2, dim=1)
     return F.silu(x1) * x2
 
@@ -15,6 +16,7 @@ def run_silu_and_mul(
     d: int,
     dtype: torch.dtype,
 ) -> None:
+    """运行SiLU与乘法操作的测试"""
     x = torch.randn(num_tokens, 2 * d, dtype=dtype, device='cuda')
     out = torch.empty(num_tokens, d, dtype=dtype, device='cuda')
     activation_ops.silu_and_mul(out, x)
@@ -23,8 +25,9 @@ def run_silu_and_mul(
 
 
 def test_silu_and_mul() -> None:
+    """测试SiLU与乘法操作的函数"""
     for dtype in [torch.half, torch.bfloat16, torch.float]:
         for num_tokens in [7, 83, 2048]:
             for d in [512, 4096, 5120, 13824]:
-                print(f'Testing dtype={dtype}, num_tokens={num_tokens}, d={d}')
+                print(f'测试 dtype={dtype}, num_tokens={num_tokens}, d={d}')
                 run_silu_and_mul(num_tokens, d, dtype)

@@ -15,13 +15,14 @@ def run_copy_blocks(
     num_blocks: int,
     dtype: torch.dtype,
 ) -> None:
-    # Generate random block mappings.
+    """运行块复制操作的测试"""
+    # 生成随机块映射
     src_blocks = random.sample(range(num_blocks), num_mappings)
     remainig_blocks = list(set(range(num_blocks)) - set(src_blocks))
     dst_blocks = random.sample(remainig_blocks, num_mappings)
     block_mapping = {src: [dst] for src, dst in zip(src_blocks, dst_blocks)}
 
-    # Create the KV cache.
+    # 创建KV缓存
     x = 16 // torch.tensor([], dtype=dtype).element_size()
     key_cache_shape = (num_blocks, num_heads, head_size // x, block_size, x)
     key_caches = []
@@ -43,10 +44,10 @@ def run_copy_blocks(
     for value_cache in value_caches:
         cloned_value_caches.append(value_cache.clone())
 
-    # Call the copy blocks kernel.
+    # 调用块复制内核
     cache_ops.copy_blocks(key_caches, value_caches, block_mapping)
 
-    # Reference implementation.
+    # 参考实现
     for src, dsts in block_mapping.items():
         for dst in dsts:
             for key_cache, cloned_key_cache in zip(key_caches, cloned_key_caches):
@@ -54,7 +55,7 @@ def run_copy_blocks(
             for value_cache, cloned_value_cache in zip(value_caches, cloned_value_caches):
                 cloned_value_cache[dst] = cloned_value_cache[src]
 
-    # Compare the results.
+    # 比较结果
     for key_cache, cloned_key_cache in zip(key_caches, cloned_key_caches):
         assert torch.allclose(key_cache, cloned_key_cache)
     for value_cache, cloned_value_cache in zip(value_caches, cloned_value_caches):
@@ -70,6 +71,7 @@ def run_reshape_and_cache(
     num_blocks: int,
     dtype: torch.dtype,
 ) -> None:
+    """运行重塑和缓存操作的测试"""
     num_slots = block_size * num_blocks
     slot_mapping = random.sample(range(num_slots), num_tokens)
     slot_mapping = torch.tensor(slot_mapping, dtype=torch.int, device='cuda')
@@ -110,6 +112,7 @@ def run_gather_cached_kv(
     num_blocks: int,
     dtype: torch.dtype,
 ) -> None:
+    """运行收集缓存KV操作的测试"""
     num_slots = block_size * num_blocks
     slot_mapping = random.sample(range(num_slots), num_tokens)
     slot_mapping = torch.tensor(slot_mapping, dtype=torch.int, device='cuda')
@@ -131,7 +134,7 @@ def run_gather_cached_kv(
 
     cache_ops.gather_cached_kv(key, value, key_cache, value_cache, slot_mapping)
 
-    # Reference implementation.
+    # 参考实现
     for i in range(num_tokens):
         reshaped_key = cloned_key.reshape(num_tokens, num_heads, head_size // x, x)
         block_idx = torch.div(slot_mapping[i], block_size, rounding_mode='floor')
@@ -144,6 +147,7 @@ def run_gather_cached_kv(
 
 
 def test_copy_blocks() -> None:
+    """测试块复制操作的函数"""
     for dtype in [torch.half, torch.bfloat16, torch.float]:
         run_copy_blocks(
             num_mappings=23, num_layers=7, num_heads=17, head_size=16,
@@ -151,6 +155,7 @@ def test_copy_blocks() -> None:
 
 
 def test_reshape_and_cache() -> None:
+    """测试重塑和缓存操作的函数"""
     for dtype in [torch.half, torch.bfloat16, torch.float]:
         run_reshape_and_cache(
             num_tokens=3, num_heads=2, head_size=16, block_size=8, num_blocks=2,
@@ -158,6 +163,7 @@ def test_reshape_and_cache() -> None:
 
 
 def test_gather_cached_kv() -> None:
+    """测试收集缓存KV操作的函数"""
     for dtype in [torch.half, torch.bfloat16, torch.float]:
         run_gather_cached_kv(
             num_tokens=3, num_heads=2, head_size=16, block_size=8, num_blocks=2,

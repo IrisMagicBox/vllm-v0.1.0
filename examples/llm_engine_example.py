@@ -4,11 +4,11 @@ from vllm import EngineArgs, LLMEngine, SamplingParams
 
 
 def main(args: argparse.Namespace):
-    # Parse the CLI argument and initialize the engine.
+    # 解析CLI参数并初始化引擎。
     engine_args = EngineArgs.from_cli_args(args)
     engine = LLMEngine.from_engine_args(engine_args)
 
-    # Test the following prompts.
+    # 测试以下提示。
     test_prompts = [
         ("A robot may not injure a human being", SamplingParams()),
         ("To be or not to be,",
@@ -19,10 +19,10 @@ def main(args: argparse.Namespace):
          SamplingParams(n=3, best_of=3, use_beam_search=True, temperature=0.0)),
     ]
 
-    # Run the engine by calling `engine.step()` manually.
+    # 通过手动调用 `engine.step()` 来运行引擎。
     request_id = 0
     while True:
-        # To test iteration-level scheduling, we add one request at each step.
+        # 为了测试迭代级调度，我们在每个步骤添加一个请求。
         if test_prompts:
             prompt, sampling_params = test_prompts.pop(0)
             engine.add_request(str(request_id), prompt, sampling_params)
@@ -39,7 +39,7 @@ def main(args: argparse.Namespace):
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(
-        description='Demo on using the LLMEngine class directly')
+        description='直接使用LLMEngine类的演示')
     parser = EngineArgs.add_cli_args(parser)
     args = parser.parse_args()
     main(args)

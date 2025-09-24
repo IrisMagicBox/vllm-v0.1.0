@@ -13,7 +13,7 @@ __global__ void rotary_embedding_neox_kernel(
   const int stride,
   const int num_heads,
   const int head_size) {
-  // Each thread block is responsible for one token.
+  // 每个线程块负责一个token。
   const int token_idx = blockIdx.x;
   int64_t pos = positions[token_idx];
   const scalar_t* cache_ptr = cos_sin_cache + pos * rot_dim;

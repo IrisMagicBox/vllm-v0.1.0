@@ -31,17 +31,17 @@ PYBIND11_MODULE(TORCH_EXTENSION_NAME, m) {
   m.def(
     "swap_blocks",
     &swap_blocks,
-    "Swap in (out) the cache blocks from src to dst");
+    "将缓存块从源交换到目标");
   m.def(
     "copy_blocks",
     &copy_blocks,
-    "Copy the cache blocks from src to dst");
+    "将缓存块从源复制到目标");
   m.def(
     "reshape_and_cache",
     &reshape_and_cache,
-    "Reshape the key and value tensors and cache them");
+    "重塑键和值张量并将它们缓存");
   m.def(
     "gather_cached_kv",
     &gather_cached_kv,
-    "Gather key and value from the cache into contiguous QKV tensors");
+    "从缓存中收集键和值到连续的QKV张量中");
 }

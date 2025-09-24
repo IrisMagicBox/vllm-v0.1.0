@@ -1,5 +1,5 @@
-# Read the Docs configuration file
-# See https://docs.readthedocs.io/en/stable/config-file/v2.html for details
+# Read the Docs 配置文件
+# 详情请参见 https://docs.readthedocs.io/en/stable/config-file/v2.html
 
 version: 2
 
@@ -11,11 +11,11 @@ build:
 sphinx:
    configuration: docs/source/conf.py
 
-# If using Sphinx, optionally build your docs in additional formats such as PDF
+# 如果使用 Sphinx，可以选择将文档构建为其他格式，例如 PDF
 formats:
    - pdf
 
-# Optionally declare the Python requirements required to build your docs
+# 可选择性地声明构建文档所需的 Python 依赖
 python:
    install:
    - requirements: docs/requirements-docs.txt

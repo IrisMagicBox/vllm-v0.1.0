@@ -1,19 +1,17 @@
 /*
- * Adapted from https://github.com/NVIDIA/FasterTransformer/blob/release/v5.3_tag/src/fastertransformer/kernels/decoder_masked_multihead_attention/decoder_masked_multihead_attention_template.hpp
- * Copyright (c) 2023, The vLLM team.
- * Copyright (c) 2020-2023, NVIDIA CORPORATION.  All rights reserved.
+ * 改编自 https://github.com/NVIDIA/FasterTransformer/blob/release/v5.3_tag/src/fastertransformer/kernels/decoder_masked_multihead_attention/decoder_masked_multihead_attention_template.hpp
+ * 版权所有 (c) 2023, vLLM 团队。
+ * 版权所有 (c) 2020-2023, NVIDIA CORPORATION。保留所有权利。
  *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
+ * 根据 Apache 许可证 2.0 版（"许可证"）进行许可；
+ * 除了遵守许可证外，不得使用此文件。
+ * 您可以在以下位置获得许可证副本：
  *
  *     http://www.apache.org/licenses/LICENSE-2.0
  *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
+ * 除非适用法律要求或书面同意，根据许可证分发的软件
+ * 按"现状"分发，不附带任何明示或暗示的担保条件。
+ * 有关许可证下权限和限制的具体语言，请参见许可证。
  */
 #include <torch/extension.h>
 #include <ATen/cuda/CUDAContext.h>
@@ -29,43 +27,43 @@
 
 namespace vllm {
 
-// Utility function for attention softmax.
+// 注意力 softmax 的实用函数。
 template<int NUM_WARPS>
 inline __device__ float block_sum(float* red_smem, float sum) {
-  // Decompose the thread index into warp / lane.
+  // 将线程索引分解为 warp / lane。
   int warp = threadIdx.x / WARP_SIZE;
   int lane = threadIdx.x % WARP_SIZE;
 
-  // Compute the sum per warp.
+  // 计算每个 warp 的总和。
 #pragma unroll
   for (int mask = WARP_SIZE / 2; mask >= 1; mask /= 2) {
     sum += __shfl_xor_sync(uint32_t(-1), sum, mask);
   }
 
-  // Warp leaders store the data to shared memory.
+  // warp 领导者将数据存储到共享内存中。
   if (lane == 0) {
     red_smem[warp] = sum;
   }
 
-  // Make sure the data is in shared memory.
+  // 确保数据在共享内存中。
   __syncthreads();
 
-  // The warps compute the final sums.
+  // warps 计算最终的总和。
   if (lane < NUM_WARPS) {
     sum = red_smem[lane];
   }
 
-  // Parallel reduction inside the warp.
+  // warp 内的并行归约。
 #pragma unroll
   for (int mask = NUM_WARPS / 2; mask >= 1; mask /= 2) {
     sum += __shfl_xor_sync(uint32_t(-1), sum, mask);
   }
 
-  // Broadcast to other threads.
+  // 广播到其他线程。
   return __shfl_sync(uint32_t(-1), sum, 0);
 }
 
-// Grid: (num_heads, num_seqs).
+// 网格: (num_heads, num_seqs)。
 template<
   typename scalar_t,
   int HEAD_SIZE,
@@ -92,11 +90,11 @@ __global__ void single_query_cached_kv_attention_kernel(
   const int num_heads = gridDim.x;
   const int seq_idx = blockIdx.y;
 
-  // A vector type to store a part of a key or a query.
-  // The vector size is configured in such a way that the threads in a thread group
-  // fetch or compute 16 bytes at a time.
-  // For example, if the size of a thread group is 4 and the data type is half,
-  // then the vector size is 16 / (4 * sizeof(half)) == 2.
+  // 用于存储键或查询的一部分的向量类型。
+  // 向量大小配置为线程组中的线程
+  // 每次获取或计算 16 字节。
+  // 例如，如果线程组大小为 4 且数据类型为 half，
+  // 那么向量大小为 16 / (4 * sizeof(half)) == 2。
   constexpr int VEC_SIZE = MAX(16 / (THREAD_GROUP_SIZE * sizeof(scalar_t)), 1);
   using K_vec = typename Vec<scalar_t, VEC_SIZE>::Type;
   using Q_vec = typename Vec<scalar_t, VEC_SIZE>::Type;
@@ -107,12 +105,12 @@ __global__ void single_query_cached_kv_attention_kernel(
   const int thread_group_idx = thread_idx / THREAD_GROUP_SIZE;
   const int thread_group_offset = thread_idx % THREAD_GROUP_SIZE;
 
-  // Load the query to registers.
-  // Each thread in a thread group has a different part of the query.
-  // For example, if the the thread group size is 4, then the first thread in the group
-  // has 0, 4, 8, ... th vectors of the query, and the second thread has 1, 5, 9, ...
-  // th vectors of the query, and so on.
-  // NOTE(woosuk): Because q is split from a qkv tensor, it may not be contiguous.
+  // 将查询加载到寄存器中。
+  // 线程组中的每个线程都有查询的不同部分。
+  // 例如，如果线程组大小为 4，则组中的第一个线程
+  // 具有查询的第 0、4、8、... 个向量，第二个线程有第 1、5、9、... 
+  // 个查询向量，依此类推。
+  // 注意(woosuk)：因为 q 是从 qkv 张量中拆分的，所以它可能不是连续的。
   const scalar_t* q_ptr = q + seq_idx * q_stride + head_idx * HEAD_SIZE;
   Q_vec q_vecs[NUM_VECS_PER_THREAD];
 #pragma unroll
@@ -121,15 +119,15 @@ __global__ void single_query_cached_kv_attention_kernel(
     q_vecs[i] = *reinterpret_cast<const Q_vec*>(q_ptr + vec_idx * VEC_SIZE);
   }
 
-  // Memory planning.
+  // 内存规划。
   extern __shared__ char shared_mem[];
-  // NOTE(woosuk): We use FP32 for the softmax logits for better accuracy.
+  // 注意(woosuk)：我们使用 FP32 作为 softmax logits 以获得更好的准确性。
   float* logits = reinterpret_cast<float*>(shared_mem);
-  // Workspace for reduction.
+  // 归约的工作空间。
   __shared__ float red_smem[2 * NUM_WARPS];
 
   // x == THREAD_GROUP_SIZE * VEC_SIZE
-  // Each thread group fetches x elements from the key at a time.
+  // 每个线程组每次从键中获取 x 个元素。
   constexpr int x = 16 / sizeof(scalar_t);
   float qk_max = -FLT_MAX;
 
@@ -137,18 +135,18 @@ __global__ void single_query_cached_kv_attention_kernel(
   const int context_len = context_lens[seq_idx];
   const int num_blocks = (context_len + BLOCK_SIZE - 1) / BLOCK_SIZE;
 
-  // Iterate over the key blocks.
-  // Each warp fetches a block of keys for each iteration.
-  // Each thread group in a warp fetches a key from the block, and computes
-  // dot product with the query.
+  // 遍历键块。
+  // 每个 warp 在每次迭代中获取一个键块。
+  // warp 中的每个线程组从块中获取一个键，并计算
+  // 与查询的点积。
   for (int block_idx = warp_idx; block_idx < num_blocks; block_idx += NUM_WARPS) {
     const int physical_block_number = block_table[block_idx];
 
-    // Load a key to registers.
-    // Each thread in a thread group has a different part of the key.
-    // For example, if the the thread group size is 4, then the first thread in the group
-    // has 0, 4, 8, ... th vectors of the key, and the second thread has 1, 5, 9, ... th
-    // vectors of the key, and so on.
+    // 将键加载到寄存器中。
+    // 线程组中的每个线程都有键的不同部分。
+    // 例如，如果线程组大小为 4，则组中的第一个线程
+    // 具有键的第 0、4、8、... 个向量，第二个线程有第 1、5、9、... 第
+    // 个键向量，依此类推。
     for (int i = 0; i < NUM_TOKENS_PER_THREAD_GROUP; i++) {
       const int physical_block_offset = (thread_group_idx + i * WARP_SIZE) % BLOCK_SIZE;
       const int token_idx = block_idx * BLOCK_SIZE + physical_block_offset;
@@ -165,24 +163,24 @@ __global__ void single_query_cached_kv_attention_kernel(
         k_vecs[j] = *reinterpret_cast<const K_vec*>(k_ptr + offset1 * BLOCK_SIZE * x + offset2);
       }
 
-      // Compute dot product.
-      // This includes a reduction across the threads in the same thread group.
+      // 计算点积。
+      // 这包括同一线程组中线程的归约。
       const float qk = scale * Qk_dot<scalar_t, THREAD_GROUP_SIZE>::dot(q_vecs, k_vecs);
       const bool mask = token_idx >= context_len;
     
       if (thread_group_offset == 0) {
-        // Store the partial reductions to shared memory.
-        // NOTE(woosuk): It is required to zero out the masked logits.
+        // 将部分归约存储到共享内存中。
+        // 注意(woosuk)：必须将掩码的 logits 置零。
         logits[token_idx] = mask ? 0.f : qk;
-        // Update the max value.
+        // 更新最大值。
         qk_max = mask ? qk_max : fmaxf(qk_max, qk);
       }
     }
   }
 
-  // Perform reduction across the threads in the same warp to get the
-  // max qk value for each "warp" (not across the thread block yet).
-  // The 0-th thread of each thread group already has its max qk value.
+  // 在同一线程 warp 中执行归约以获得
+  // 每个"warp"的最大 qk 值（尚未跨线程块）。
+  // 每个线程组的第 0 个线程已经具有其最大 qk 值。
 #pragma unroll
   for (int mask = WARP_SIZE / 2; mask >= THREAD_GROUP_SIZE; mask /= 2) {
     qk_max = fmaxf(qk_max, __shfl_xor_sync(uint32_t(-1), qk_max, mask));
@@ -192,17 +190,17 @@ __global__ void single_query_cached_kv_attention_kernel(
   }
   __syncthreads();
 
-  // TODO(woosuk): Refactor this part.
-  // Get the max qk value for the sequence.
+  // TODO(woosuk)：重构此部分。
+  // 获取序列的最大 qk 值。
   qk_max = lane < NUM_WARPS ? red_smem[lane] : -FLT_MAX;
 #pragma unroll
   for (int mask = NUM_WARPS / 2; mask >= 1; mask /= 2) {
     qk_max = fmaxf(qk_max, __shfl_xor_sync(uint32_t(-1), qk_max, mask));
   }
-  // Broadcast the max qk value to all threads.
+  // 将最大 qk 值广播到所有线程。
   qk_max = __shfl_sync(uint32_t(-1), qk_max, 0);
 
-  // Get the sum of the exp values.
+  // 获取 exp 值的总和。
   float exp_sum = 0.f;
   for (int i = thread_idx; i < context_len; i += NUM_THREADS) {
     float val = __expf(logits[i] - qk_max);
@@ -211,14 +209,14 @@ __global__ void single_query_cached_kv_attention_kernel(
   }
   exp_sum = block_sum<NUM_WARPS>(&red_smem[NUM_WARPS], exp_sum);
 
-  // Compute softmax.
+  // 计算 softmax。
   const float inv_sum = __fdividef(1.f, exp_sum + 1e-6f);
   for (int i = thread_idx; i < context_len; i += NUM_THREADS) {
     logits[i] *= inv_sum;
   }
   __syncthreads();
 
-  // Each thread will fetch 16 bytes from the value cache at a time.
+  // 每个线程每次将从值缓存中获取 16 字节。
   constexpr int V_VEC_SIZE = MIN(16 / sizeof(scalar_t), BLOCK_SIZE);
   using V_vec = typename Vec<scalar_t, V_VEC_SIZE>::Type;
   using L_vec = typename Vec<scalar_t, V_VEC_SIZE>::Type;
@@ -228,7 +226,7 @@ __global__ void single_query_cached_kv_attention_kernel(
   constexpr int NUM_ROWS_PER_ITER = WARP_SIZE / NUM_V_VECS_PER_ROW;
   constexpr int NUM_ROWS_PER_THREAD = (HEAD_SIZE + NUM_ROWS_PER_ITER - 1) / NUM_ROWS_PER_ITER;
 
-  // NOTE(woosuk): We use FP32 for the accumulator for better accuracy.
+  // 注意(woosuk)：我们使用 FP32 作为累加器以获得更好的准确性。
   float accs[NUM_ROWS_PER_THREAD];
 #pragma unroll
   for (int i = 0; i < NUM_ROWS_PER_THREAD; i++) {
@@ -255,7 +253,7 @@ __global__ void single_query_cached_kv_attention_kernel(
     }
   }
 
-  // Perform reduction within each warp.
+  // 在每个 warp 内执行归约。
 #pragma unroll
   for (int i = 0; i < NUM_ROWS_PER_THREAD; i++) {
     float acc = accs[i];
@@ -266,16 +264,16 @@ __global__ void single_query_cached_kv_attention_kernel(
     accs[i] = acc;
   }
 
-  // NOTE(woosuk): A barrier is required because the shared memory space for logits
-  // is reused for the output.
+  // 注意(woosuk)：需要一个屏障，因为 logits 的共享内存空间
+  // 被重新用于输出。
   __syncthreads();
 
-  // Perform reduction across warps.
+  // 在 warp 之间执行归约。
   float* out_smem = reinterpret_cast<float*>(shared_mem);
 #pragma unroll
   for (int i = NUM_WARPS; i > 1; i /= 2) {
     int mid = i / 2;
-    // Upper warps write to shared memory.
+    // 上层 warps 写入共享内存。
     if (warp_idx >= mid && warp_idx < i) {
       float* dst = &out_smem[(warp_idx - mid) * HEAD_SIZE];
 #pragma unroll
@@ -288,7 +286,7 @@ __global__ void single_query_cached_kv_attention_kernel(
     }
     __syncthreads();
 
-    // Lower warps update the output.
+    // 下层 warps 更新输出。
     if (warp_idx < mid) {
       const float* src = &out_smem[warp_idx * HEAD_SIZE];
 #pragma unroll
@@ -302,7 +300,7 @@ __global__ void single_query_cached_kv_attention_kernel(
     __syncthreads();
   }
 
-  // Write the final output.
+  // 写入最终输出。
   if (warp_idx == 0) {
     scalar_t* out_ptr = out + seq_idx * num_heads * HEAD_SIZE + head_idx * HEAD_SIZE;
 #pragma unroll
@@ -330,7 +328,7 @@ __global__ void single_query_cached_kv_attention_kernel(
     max_num_blocks_per_seq,                                                                   \
     query_stride);
 
-// TODO(woosuk): Tune NUM_THREADS.
+// TODO(woosuk)：调整 NUM_THREADS。
 template<
   typename T,
   int BLOCK_SIZE,
@@ -370,8 +368,8 @@ void single_query_cached_kv_attention_launcher(
   dim3 block(NUM_THREADS);
   const cudaStream_t stream = at::cuda::getCurrentCUDAStream();
   switch (head_size) {
-    // NOTE(woosuk): To reduce the compilation time, we omitted head sizes
-    // 32, 160, 192, 256.
+    // 注意(woosuk)：为了减少编译时间，我们省略了头尺寸
+    // 32, 160, 192, 256。
     // case 32:
     //   LAUNCH_ATTENTION_KERNEL(T, 32, BLOCK_SIZE, NUM_THREADS);
     //   break;
@@ -397,7 +395,7 @@ void single_query_cached_kv_attention_launcher(
     //   LAUNCH_ATTENTION_KERNEL(T, 256, BLOCK_SIZE, NUM_THREADS);
     //   break;
     default:
-      TORCH_CHECK(false, "Unsupported head size: ", head_size);
+      TORCH_CHECK(false, "不支持的头尺寸: ", head_size);
       break;
   }
 }
@@ -413,8 +411,8 @@ void single_query_cached_kv_attention_launcher(
     context_lens,                                                   \
     max_context_len);
 
-// NOTE(woosuk): To reduce the compilation time, we omitted block sizes
-// 1, 2, 4, 64, 128, 256.
+// 注意(woosuk)：为了减少编译时间，我们省略了块大小
+// 1, 2, 4, 64, 128, 256。
 #define CALL_KERNEL_LAUNCHER_BLOCK_SIZE(T)                          \
   switch (block_size) {                                             \
     /* case 1:                         */                           \
@@ -445,7 +443,7 @@ void single_query_cached_kv_attention_launcher(
     /*   CALL_KERNEL_LAUNCHER(T, 256); */                           \
     /*   break;                        */                           \
     default:                                                        \
-      TORCH_CHECK(false, "Unsupported block size: ", block_size);   \
+      TORCH_CHECK(false, "不支持的块大小: ", block_size);   \
       break;                                                        \
   }
 
@@ -466,7 +464,7 @@ void single_query_cached_kv_attention(
   } else if (query.dtype() == at::ScalarType::BFloat16) {
     CALL_KERNEL_LAUNCHER_BLOCK_SIZE(__nv_bfloat16);
   } else {
-    TORCH_CHECK(false, "Unsupported data type: ", query.dtype());
+    TORCH_CHECK(false, "不支持的数据类型: ", query.dtype());
   }
 }
 

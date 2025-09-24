@@ -1,4 +1,4 @@
-"""A layer that samples the next tokens from the model's outputs."""
+"""一个从模型输出中采样下一个标记的层。"""
 from typing import Dict, List, Tuple, Optional
 
 import numpy as np
@@ -13,18 +13,17 @@ from vllm.sequence import SequenceOutputs
 
 
 class Sampler(nn.Module):
-    """Samples the next tokens from the model's outputs.
+    """从模型输出中采样下一个标记。
 
-    This layer does the following:
-    1. Discard the hidden states that are not used for sampling (i.e., all
-        tokens except the final one in each prompt).
-    2. Compute the logits for the next tokens.
-    3. Apply presence and frequency penalties.
-    4. Apply temperature scaling.
-    5. Apply top-p and top-k truncation.
-    6. Sample the next tokens.
-    Here, each sequence group within the batch can have different sampling
-    parameters (e.g., sampling method, temperature, top-p, top-k, etc.).
+    该层执行以下操作：
+    1. 丢弃不用于采样的隐藏状态（即，每个提示中的除最后一个之外的所有标记）。
+    2. 计算下一个标记的logits。
+    3. 应用存在惩罚和频率惩罚。
+    4. 应用温度缩放。
+    5. 应用top-p和top-k截断。
+    6. 采样下一个标记。
+    这里，批次内的每个序列组都可以有不同的采样参数
+    （例如，采样方法、温度、top-p、top-k等）。
     """
 
     def __init__(self, vocab_size: int) -> None:
@@ -37,16 +36,16 @@ class Sampler(nn.Module):
         hidden_states: torch.Tensor,
         input_metadata: InputMetadata,
     ) -> Dict[int, SequenceOutputs]:
-        # Get the hidden states that we use for sampling.
+        # 获取我们用于采样的隐藏状态。
         hidden_states = _prune_hidden_states(hidden_states, input_metadata)
 
-        # Get the logits for the next tokens.
+        # 获取下一个标记的logits。
         logits = torch.matmul(hidden_states, embedding.t())
         logits = gather_from_tensor_model_parallel_region(logits)
-        # Remove paddings in vocab (if any).
+        # 移除词汇表中的填充（如果有的话）。
         logits = logits[:, :self.vocab_size]
 
-        # Apply presence and frequency penalties.
+        # 应用存在惩罚和频率惩罚。
         output_tokens = _get_output_tokens(input_metadata)
         assert len(output_tokens) == logits.shape[0]
         presence_penalties, frequency_penalties = _get_penalties(input_metadata)
@@ -56,28 +55,28 @@ class Sampler(nn.Module):
             logits, output_tokens, presence_penalties, frequency_penalties,
             self.vocab_size)
 
-        # Apply temperature scaling.
+        # 应用温度缩放。
         temperatures = _get_temperatures(input_metadata)
         assert len(temperatures) == logits.shape[0]
         if any(t != 1.0 for t in temperatures):
             t = torch.tensor(
                 temperatures, dtype=logits.dtype, device=logits.device)
-            # Use in-place division to avoid creating a new tensor.
+            # 使用原地除法以避免创建新张量。
             logits.div_(t.unsqueeze(dim=1))
 
-        # We use float32 for probabilities and log probabilities.
-        # Compute the probabilities.
+        # 我们使用float32表示概率和对数概率。
+        # 计算概率。
         probs = torch.softmax(logits, dim=-1, dtype=torch.float)
-        # Compute the log probabilities (before applying top-p and top-k).
+        # 计算对数概率（在应用top-p和top-k之前）。
         logprobs = torch.log(probs)
 
-        # Apply top-p and top-k truncation.
+        # 应用top-p和top-k截断。
         top_ps, top_ks = _get_top_p_top_k(input_metadata, self.vocab_size)
         assert len(top_ps) == len(top_ks) == probs.shape[0]
         if any(p < 1.0 for p in top_ps) or any(k != self.vocab_size for k in top_ks):
             probs = _apply_top_p_top_k(probs, top_ps, top_ks)
 
-        # Sample the next tokens.
+        # 采样下一个标记。
         return _sample(probs, logprobs, input_metadata)
 
 
@@ -98,7 +97,7 @@ def _prune_hidden_states(
 def _get_penalties(
     input_metadata: InputMetadata,
 ) -> Tuple[List[float], List[float]]:
-    # Collect the presence and frequency penalties.
+    # 收集存在惩罚和频率惩罚。
     presence_penalties: List[float] = []
     frequency_penalties: List[float] = []
     for i, seq_group in enumerate(input_metadata.seq_groups):
@@ -106,11 +105,11 @@ def _get_penalties(
         p = sampling_params.presence_penalty
         f = sampling_params.frequency_penalty
         if i < input_metadata.num_prompts:
-            # A prompt input.
+            # 一个提示输入。
             presence_penalties.append(p)
             frequency_penalties.append(f)
         else:
-            # A generation token.
+            # 一个生成标记。
             presence_penalties += [p] * len(seq_ids)
             frequency_penalties += [f] * len(seq_ids)
     return presence_penalties, frequency_penalties
@@ -123,14 +122,14 @@ def _get_output_tokens(
     for i, seq_group in enumerate(input_metadata.seq_groups):
         seq_ids, _ = seq_group
         if i < input_metadata.num_prompts:
-            # A prompt input.
-            # NOTE: While the prompt input usually has no output tokens,
-            # it may have output tokens in the case of recomputation.
+            # 一个提示输入。
+            # 注意：虽然提示输入通常没有输出标记，
+            # 但在重新计算的情况下可能有输出标记。
             seq_id = seq_ids[0]
             seq_data = input_metadata.seq_data[seq_id]
             output_tokens.append(seq_data.output_token_ids)
         else:
-            # A generation token.
+            # 一个生成标记。
             for seq_id in seq_ids:
                 seq_data = input_metadata.seq_data[seq_id]
                 output_tokens.append(seq_data.output_token_ids)
@@ -145,7 +144,7 @@ def _apply_penalties(
     vocab_size: int,
 ) -> torch.Tensor:
     num_seqs = logits.shape[0]
-    # Collect the indices of sequences that have non-zero penalties.
+    # 收集具有非零惩罚的序列索引。
     indices = []
     for i in range(num_seqs):
         if not output_tokens[i]:
@@ -156,7 +155,7 @@ def _apply_penalties(
             continue
         indices.append(i)
 
-    # Return early if all sequences have zero penalties.
+    # 如果所有序列都有零惩罚，则提前返回。
     if not indices:
         return logits
 
@@ -174,8 +173,8 @@ def _apply_penalties(
     presence_penalties = torch.tensor(
         presence_penalties, dtype=logits.dtype, device=logits.device)
 
-    # We follow the definition in OpenAI API.
-    # Refer to https://platform.openai.com/docs/api-reference/parameter-details
+    # 我们遵循OpenAI API中的定义。
+    # 参见 https://platform.openai.com/docs/api-reference/parameter-details
     logits[indices] -= frequency_penalties.unsqueeze(dim=1) * bin_counts
     presence_mask = (bin_counts > 0.0).to(dtype=logits.dtype)
     logits[indices] -= presence_penalties.unsqueeze(dim=1) * presence_mask
@@ -185,22 +184,22 @@ def _apply_penalties(
 def _get_temperatures(
     input_metadata: InputMetadata,
 ) -> List[float]:
-    # Collect the temperatures for the logits.
+    # 收集logits的温度。
     temperatures: List[float] = []
     for i, seq_group in enumerate(input_metadata.seq_groups):
         seq_ids, sampling_params = seq_group
         temperature = sampling_params.temperature
         if temperature == 0.0:
-            # NOTE: Zero temperature means deterministic sampling
-            # (i.e., greedy sampling or beam search).
-            # Set the temperature to 1 to avoid division by zero.
+            # 注意：零温度意味着确定性采样
+            # （即，贪婪采样或束搜索）。
+            # 将温度设置为1以避免除以零。
             temperature = 1.0
 
         if i < input_metadata.num_prompts:
-            # A prompt input.
+            # 一个提示输入。
             temperatures.append(temperature)
         else:
-            # A generation token.
+            # 一个生成标记。
             temperatures += [temperature] * len(seq_ids)
     return temperatures
 
@@ -214,16 +213,16 @@ def _get_top_p_top_k(
     for i, seq_group in enumerate(input_metadata.seq_groups):
         seq_ids, sampling_params = seq_group
         top_p = sampling_params.top_p
-        # k should not be greater than the vocab size.
+        # k不应大于词汇表大小。
         top_k = min(sampling_params.top_k, vocab_size)
-        # k=-1 means no truncation.
+        # k=-1表示无截断。
         top_k = vocab_size if top_k == -1 else top_k
         if i < input_metadata.num_prompts:
-            # A prompt input.
+            # 一个提示输入。
             top_ps.append(top_p)
             top_ks.append(top_k)
         else:
-            # A generation token.
+            # 一个生成标记。
             top_ps += [top_p] * len(seq_ids)
             top_ks += [top_k] * len(seq_ids)
     return top_ps, top_ks
@@ -238,19 +237,19 @@ def _apply_top_p_top_k(
     k = torch.tensor(top_ks, dtype=torch.int, device=probs.device)
     probs_sort, probs_idx = probs.sort(dim=-1, descending=True)
 
-    # Apply top-p.
+    # 应用top-p。
     probs_sum = torch.cumsum(probs_sort, dim=-1)
     top_p_mask = (probs_sum - probs_sort) > p.unsqueeze(dim=1)
     probs_sort[top_p_mask] = 0.0
 
-    # Apply top-k.
-    # Create a mask for the top-k elements.
+    # 应用top-k。
+    # 为top-k元素创建掩码。
     top_k_mask = torch.arange(probs_idx.shape[-1], device=probs_idx.device)
     top_k_mask = top_k_mask.expand(probs_idx.shape[0], -1)
     top_k_mask = top_k_mask >= k.unsqueeze(dim=1)
     probs_sort[top_k_mask] = 0.0
 
-    # Re-sort the probabilities.
+    # 重新排序概率。
     probs = torch.gather(
         probs_sort, dim=-1, index=torch.argsort(probs_idx, dim=-1))
     return probs
@@ -282,18 +281,18 @@ def _sample_from_prompt(
     sampling_params: SamplingParams,
 ) -> List[int]:
     if sampling_params.use_beam_search:
-        # Beam search.
+        # 束搜索。
         beam_width = sampling_params.best_of
         _, next_token_ids = torch.topk(prob, beam_width)
         next_token_ids = next_token_ids.tolist()
     elif sampling_params.temperature == 0.0:
-        # Greedy sampling.
+        # 贪婪采样。
         assert sampling_params.best_of == 1
         next_token_id = torch.argmax(prob)
         next_token_ids = [next_token_id.item()]
     else:
-        # Random sampling.
-        # Sample `best_of` tokens for the prompt.
+        # 随机采样。
+        # 为提示采样`best_of`个标记。
         num_seqs = sampling_params.best_of
         next_token_ids = torch.multinomial(
             prob, num_samples=num_seqs, replacement=True)
@@ -308,12 +307,12 @@ def _sample_from_generation_tokens(
     seq_logprobs: List[float],
     sampling_params: SamplingParams,
 ) -> Tuple[List[int], List[int]]:
-    # NOTE(woosuk): sampling_params.best_of can be greater than
-    # len(seq_ids) because some sequences in the group might have
-    # been already terminated.
+    # 注意(woosuk)：sampling_params.best_of可能大于
+    # len(seq_ids)，因为组中的一些序列可能
+    # 已经被终止了。
     if sampling_params.use_beam_search:
-        # Beam search.
-        # Add cumulative logprobs for the sequences in the group.
+        # 束搜索。
+        # 为组中的序列添加累积对数概率。
         seq_logprobs = torch.tensor(
             seq_logprobs, dtype=torch.float, device=logprobs.device)
         logprobs = logprobs + seq_logprobs.unsqueeze(dim=1)
@@ -328,14 +327,14 @@ def _sample_from_generation_tokens(
 
         beam_outputs: Dict[int, Tuple[int, int]] = {}
         outstanding_beams: List[Tuple[int, int]] = []
-        # If a beam survives, continue with it.
+        # 如果一个束存活下来，继续使用它。
         for seq_id, token_id in zip(beam_seq_ids, token_ids):
             if seq_id not in beam_outputs:
                 beam_outputs[seq_id] = (seq_id, token_id)
             else:
                 outstanding_beams.append((seq_id, token_id))
 
-        # If a beam is discarded, fork another beam.
+        # 如果一个束被丢弃，分叉另一个束。
         for seq_id in seq_ids:
             if seq_id not in beam_outputs:
                 beam_outputs[seq_id] = outstanding_beams.pop()
@@ -344,14 +343,14 @@ def _sample_from_generation_tokens(
         parent_seq_ids = [beam_outputs[seq_id][0] for seq_id in seq_ids]
         next_token_ids = [beam_outputs[seq_id][1] for seq_id in seq_ids]
     elif sampling_params.temperature == 0.0:
-        # Greedy sampling.
+        # 贪婪采样。
         assert len(seq_ids) == 1
         next_token_id = torch.argmax(probs, dim=-1)
         next_token_ids = [int(next_token_id.item())]
         parent_seq_ids = seq_ids
     else:
-        # Random sampling.
-        # Sample 1 token for each sequence in the group.
+        # 随机采样。
+        # 为组中的每个序列采样1个标记。
         next_token_ids = torch.multinomial(
             probs, num_samples=1, replacement=True)
         next_token_ids = next_token_ids.squeeze(dim=-1).tolist()
@@ -366,49 +365,49 @@ def _sample(
 ) -> Dict[int, SequenceOutputs]:
     seq_outputs: Dict[int, SequenceOutputs] = {}
 
-    # TODO(woosuk): Optimize.
+    # TODO(woosuk)：优化。
     idx = 0
     for i, seq_group in enumerate(input_metadata.seq_groups):
         seq_ids, sampling_params = seq_group
         if i < input_metadata.num_prompts:
-            # Generate the next tokens for a prompt input.
+            # 为提示输入生成下一个标记。
             assert len(seq_ids) == sampling_params.best_of
             prob = probs[idx]
             logprob = logprobs[idx]
             idx += 1
 
-            # Sample the next tokens.
+            # 采样下一个标记。
             next_token_ids = _sample_from_prompt(prob, sampling_params)
-            # Get top-k log probabilities for the next tokens.
+            # 获取下一个标记的top-k对数概率。
             next_logprobs = _get_topk_logprobs(
                 logprob, sampling_params.logprobs)
 
-            # Build the output.
+            # 构建输出。
             for seq_id, next_token_id in zip(seq_ids, next_token_ids):
                 output_logprobs = next_logprobs.copy()
                 output_logprobs[next_token_id] = logprob[next_token_id].item()
                 seq_outputs[seq_id] = SequenceOutputs(
                     seq_id, seq_id, next_token_id, output_logprobs)
         else:
-            # Generate the next tokens for generation tokens.
+            # 为生成标记生成下一个标记。
             prob = probs[idx:idx + len(seq_ids)]
             logprob = logprobs[idx:idx + len(seq_ids)]
             idx += len(seq_ids)
 
-            # Sample the next tokens.
+            # 采样下一个标记。
             seq_logprobs = [
                 input_metadata.seq_data[seq_id].cumulative_logprob
                 for seq_id in seq_ids]
             parent_seq_ids, next_token_ids = _sample_from_generation_tokens(
                 seq_ids, prob, logprob, seq_logprobs, sampling_params)
 
-            # Get top-k log probabilities for the next tokens.
+            # 获取下一个标记的top-k对数概率。
             next_logprobs: Dict[int, Dict[int, float]] = {}
             for i, seq_id in enumerate(seq_ids):
                 next_logprobs[seq_id] = _get_topk_logprobs(
                     logprob[i], sampling_params.logprobs)
 
-            # Build the output.
+            # 构建输出。
             for seq_id, parent_seq_id, next_token_id in zip(
                 seq_ids, parent_seq_ids, next_token_ids):
                 i = seq_ids.index(parent_seq_id)

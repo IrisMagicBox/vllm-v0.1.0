@@ -13,31 +13,30 @@ from .utils import split_tensor_along_last_dim
 
 
 def _reduce(input_):
-    """All-reduce the input tensor across model parallel group."""
+    """在模型并行组中对输入张量进行全规约操作。"""
 
-    # Bypass the function if we are using only 1 GPU.
+    # 如果只使用1个GPU，则跳过此函数。
     if get_tensor_model_parallel_world_size()==1:
         return input_
 
-    # All-reduce.
+    # 全规约。
     torch.distributed.all_reduce(input_, group=get_tensor_model_parallel_group())
 
     return input_
 
 
 def _split_along_last_dim(input_):
-    """Split the tensor along its last dimension and keep the
-    corresponding slice."""
+    """沿最后一个维度拆分张量并保留相应切片。"""
 
     world_size = get_tensor_model_parallel_world_size()
-    # Bypass the function if we are using only 1 GPU.
+    # 如果只使用1个GPU，则跳过此函数。
     if world_size == 1:
         return input_
 
-    # Split along last dimension.
+    # 沿最后一个维度拆分。
     input_list = split_tensor_along_last_dim(input_, world_size)
 
-    # Note: torch.split does not create contiguous tensors by default.
+    # 注意：torch.split默认不创建连续的张量。
     rank = get_tensor_model_parallel_rank()
     output = input_list[rank].contiguous()
 
@@ -45,18 +44,17 @@ def _split_along_last_dim(input_):
 
 
 def _split_along_first_dim(input_):
-    """Split the tensor along its first dimension and keep the
-    corresponding slice."""
+    """沿第一个维度拆分张量并保留相应切片。"""
 
     world_size = get_tensor_model_parallel_world_size()
-    # Bypass the function if we are using only 1 GPU.
+    # 如果只使用1个GPU，则跳过此函数。
     if world_size == 1:
         return input_
 
-    # Split along first dimension.
+    # 沿第一个维度拆分。
     dim_size = input_.size()[0]
     assert dim_size % world_size == 0, \
-        "First dimension of the tensor should be divisible by tensor parallel size"
+        "张量的第一个维度应能被张量并行大小整除"
     local_dim_size = dim_size // world_size
     rank = get_tensor_model_parallel_rank()
     dim_offset = rank * local_dim_size
@@ -67,14 +65,14 @@ def _split_along_first_dim(input_):
 
 
 def _gather_along_last_dim(input_):
-    """Gather tensors and concatinate along the last dimension."""
+    """沿最后一个维度收集张量并进行拼接。"""
 
     world_size = get_tensor_model_parallel_world_size()
-    # Bypass the function if we are using only 1 GPU.
+    # 如果只使用1个GPU，则跳过此函数。
     if world_size == 1:
         return input_
 
-    # Size and dimension.
+    # 大小和维度。
     last_dim = input_.dim() - 1
     rank = get_tensor_model_parallel_rank()
 
@@ -82,17 +80,17 @@ def _gather_along_last_dim(input_):
     tensor_list[rank] = input_
     torch.distributed.all_gather(tensor_list, input_, group=get_tensor_model_parallel_group())
 
-    # Note: torch.cat already creates a contiguous tensor.
+    # 注意：torch.cat已经创建了一个连续的张量。
     output = torch.cat(tensor_list, dim=last_dim).contiguous()
 
     return output
 
 
 def _gather_along_first_dim(input_):
-    """Gather tensors and concatinate along the first dimension."""
+    """沿第一个维度收集张量并进行拼接。"""
 
     world_size = get_tensor_model_parallel_world_size()
-    # Bypass the function if we are using only 1 GPU.
+    # 如果只使用1个GPU，则跳过此函数。
     if world_size == 1:
         return input_
 
@@ -107,15 +105,15 @@ def _gather_along_first_dim(input_):
     return output
 
 def _reduce_scatter_along_first_dim(input_):
-    """Reduce-scatter the input tensor across model parallel group."""
+    """在模型并行组中对输入张量进行规约-分散操作。"""
     world_size = get_tensor_model_parallel_world_size()
-    # Bypass the function if we are using only 1 GPU.
+    # 如果只使用1个GPU，则跳过此函数。
     if world_size == 1:
         return input_
 
     dim_size = list(input_.size())
     assert dim_size[0] % world_size == 0, \
-        "First dimension of the tensor should be divisible by tensor parallel size"
+        "张量的第一个维度应能被张量并行大小整除"
 
     dim_size[0] = dim_size[0] // world_size
 
@@ -127,7 +125,7 @@ def _reduce_scatter_along_first_dim(input_):
 
 
 class _CopyToModelParallelRegion(torch.autograd.Function):
-    """Pass the input to the model parallel region."""
+    """将输入传递到模型并行区域。"""
 
     @staticmethod
     def symbolic(graph, input_):
@@ -143,7 +141,7 @@ class _CopyToModelParallelRegion(torch.autograd.Function):
 
 
 class _ReduceFromModelParallelRegion(torch.autograd.Function):
-    """All-reduce the input from the model parallel region."""
+    """对来自模型并行区域的输入进行全规约操作。"""
 
     @staticmethod
     def symbolic(graph, input_):
@@ -159,7 +157,7 @@ class _ReduceFromModelParallelRegion(torch.autograd.Function):
 
 
 class _ScatterToModelParallelRegion(torch.autograd.Function):
-    """Split the input and keep only the corresponding chuck to the rank."""
+    """拆分输入并只保留对应rank的数据块。"""
 
     @staticmethod
     def symbolic(graph, input_):
@@ -175,7 +173,7 @@ class _ScatterToModelParallelRegion(torch.autograd.Function):
 
 
 class _GatherFromModelParallelRegion(torch.autograd.Function):
-    """Gather the input from model parallel region and concatinate."""
+    """从模型并行区域收集输入并进行拼接。"""
 
     @staticmethod
     def symbolic(graph, input_):
@@ -191,7 +189,7 @@ class _GatherFromModelParallelRegion(torch.autograd.Function):
 
 
 class _ScatterToSequenceParallelRegion(torch.autograd.Function):
-    """Split the input and keep only the corresponding chuck to the rank."""
+    """拆分输入并只保留对应rank的数据块。"""
 
     @staticmethod
     def symbolic(graph, input_):
@@ -207,7 +205,7 @@ class _ScatterToSequenceParallelRegion(torch.autograd.Function):
 
 
 class _GatherFromSequenceParallelRegion(torch.autograd.Function):
-    """Gather the input from sequence parallel region and concatinate."""
+    """从序列并行区域收集输入并进行拼接。"""
 
     @staticmethod
     def symbolic(graph, input_, tensor_parallel_output_grad=True):
@@ -222,10 +220,9 @@ class _GatherFromSequenceParallelRegion(torch.autograd.Function):
     def backward(ctx, grad_output):
         tensor_parallel_output_grad = ctx.tensor_parallel_output_grad
 
-        # If the computation graph after the gather operation is
-        # in the tensor parallel mode, output gradients need to reduce
-        # scattered and whereas if the computation is duplicated,
-        # output gradients need to be scattered.
+        # 如果收集操作后的计算图处于张量并行模式，
+        # 输出梯度需要进行规约-分散操作；
+        # 而如果计算是重复的，则输出梯度需要被分散。
         if tensor_parallel_output_grad:
             return _reduce_scatter_along_first_dim(grad_output), None
         else:
@@ -233,7 +230,7 @@ class _GatherFromSequenceParallelRegion(torch.autograd.Function):
 
 
 class _ReduceScatterToSequenceParallelRegion(torch.autograd.Function):
-    """Reduce scatter the input from the model parallel region."""
+    """对来自模型并行区域的输入进行规约-分散操作。"""
 
     @staticmethod
     def symbolic(graph, input_):
@@ -249,7 +246,7 @@ class _ReduceScatterToSequenceParallelRegion(torch.autograd.Function):
 
 
 # -----------------
-# Helper functions.
+# 辅助函数。
 # -----------------
 
 def copy_to_tensor_model_parallel_region(input_):

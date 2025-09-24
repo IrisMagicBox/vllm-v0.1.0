@@ -1,4 +1,4 @@
-"""A GPU worker class."""
+"""GPU工作类。"""
 from typing import Dict, List, Tuple
 
 import torch
@@ -15,11 +15,10 @@ from vllm.utils import get_gpu_memory
 
 
 class Worker:
-    """A worker class that executes (a partition of) the model on a GPU.
+    """在GPU上执行（模型分区）的工作类。
 
-    Each worker is associated with a single GPU. The worker is responsible for
-    maintaining the KV cache and executing the model on the GPU. In case of
-    distributed inference, each worker is assigned a partition of the model.
+    每个工作者与单个GPU相关联。工作者负责在GPU上维护KV缓存和执行模型。
+    在分布式推理的情况下，每个工作者被分配模型的一个分区。
     """
 
     def __init__(
@@ -36,11 +35,11 @@ class Worker:
         self.rank = rank
         self.distributed_init_method = distributed_init_method
 
-        # Initialize the distributed environment.
+        # 初始化分布式环境。
         _init_distributed_environment(parallel_config, rank,
                                       distributed_init_method)
 
-        # Initialize the model.
+        # 初始化模型。
         set_random_seed(self.model_config.seed)
         self.model = get_model(model_config)
         initialize_all_reduce_launcher(
@@ -49,8 +48,8 @@ class Worker:
             self.model_config.dtype,
         )
 
-        # Uninitialized cache engine. Will be initialized by
-        # self.init_cache_engine().
+        # 未初始化的缓存引擎。将由
+        # self.init_cache_engine() 初始化。
         self.cache_config = None
         self.block_size = None
         self.cache_engine = None
@@ -64,15 +63,15 @@ class Worker:
         gpu_memory_utilization: float,
         cpu_swap_space: int,
     ) -> Tuple[int, int]:
-        # Profile the memory usage of the model and get the maximum number of
-        # cache blocks that can be allocated with the remaining free memory.
+        # 分析模型的内存使用情况并获得可以使用剩余空闲内存分配的
+        # 最大缓存块数。
         torch.cuda.empty_cache()
         torch.cuda.reset_peak_memory_stats()
 
-        # Profile memory usage with max_num_sequences sequences and the total
-        # number of tokens equal to max_num_batched_tokens.
+        # 分析具有max_num_sequences序列的内存使用情况且总token数
+        # 等于max_num_batched_tokens。
 
-        # Enable top-k sampling to reflect the accurate memory usage.
+        # 启用top-k采样以反映准确的内存使用情况。
         sampling_params = SamplingParams(top_p=0.99,
                                          top_k=self.model.config.vocab_size - 1)
         max_num_batched_tokens = self.scheduler_config.max_num_batched_tokens
@@ -93,7 +92,7 @@ class Worker:
 
         input_tokens, input_positions, input_metadata = self._prepare_inputs(seqs)
 
-        # Execute the model.
+        # 执行模型。
         num_layers = self.model_config.get_num_layers(self.parallel_config)
         self.model(
             input_ids=input_tokens,
@@ -103,8 +102,7 @@ class Worker:
             cache_events=None,
         )
 
-        # Calculate the number of blocks that can be allocated with the
-        # profiled peak memory.
+        # 计算可以使用分析得出的峰值内存分配的块数。
         torch.cuda.synchronize()
         peak_memory = torch.cuda.max_memory_allocated()
         total_gpu_memory = get_gpu_memory()
@@ -115,8 +113,7 @@ class Worker:
         num_cpu_blocks = int(cpu_swap_space // cache_block_size)
         torch.cuda.empty_cache()
 
-        # Reset the seed to ensure that the random state is not affected by
-        # the model initialization and profiling.
+        # 重置种子以确保随机状态不受模型初始化和分析的影响。
         set_random_seed(self.model_config.seed)
         return num_gpu_blocks, num_cpu_blocks
 
@@ -137,7 +134,7 @@ class Worker:
         input_positions: List[int] = []
         slot_mapping: List[int] = []
 
-        # Add prompt tokens.
+        # 添加提示token。
         prompt_lens: List[int] = []
         for seq_group_metadata in seq_group_metadata_list:
             if not seq_group_metadata.is_prompt:
@@ -147,7 +144,7 @@ class Worker:
             sampling_params = seq_group_metadata.sampling_params
             seq_groups.append((seq_ids, sampling_params))
 
-            # Use any sequence in the group.
+            # 使用组中的任何序列。
             seq_id = seq_ids[0]
 
             seq_data = seq_group_metadata.seq_data[seq_id]
@@ -156,17 +153,17 @@ class Worker:
             prompt_lens.append(prompt_len)
 
             input_tokens.extend(prompt_tokens)
-            # NOTE(woosuk): Here we assume that the first token in the prompt
-            # is always the first token in the sequence.
+            # 注意(woosuk): 这里我们假设提示中的第一个token
+            # 始终是序列中的第一个token。
             input_positions.extend(range(len(prompt_tokens)))
 
             if seq_group_metadata.block_tables is None:
-                # During memory profiling, the block tables are not initialized
-                # yet. In this case, we just use a dummy slot mapping.
+                # 在内存分析期间，块表尚未初始化。
+                # 在这种情况下，我们只使用虚拟槽映射。
                 slot_mapping.extend([0] * prompt_len)
                 continue
 
-            # Compute the slot mapping.
+            # 计算槽映射。
             block_table = seq_group_metadata.block_tables[seq_id]
             for i in range(prompt_len):
                 block_number = block_table[i // self.block_size]
@@ -174,7 +171,7 @@ class Worker:
                 slot = block_number * self.block_size + block_offset
                 slot_mapping.append(slot)
 
-        # Add generation tokens.
+        # 添加生成token。
         max_context_len = 0
         max_num_blocks_per_seq = 0
         context_lens: List[int] = []
@@ -209,8 +206,8 @@ class Worker:
                 slot = block_number * self.block_size + block_offset
                 slot_mapping.append(slot)
 
-        # Optimization: Pad the input length to be a multiple of 8.
-        # This is required for utilizing the Tensor Cores in NVIDIA GPUs.
+        # 优化：将输入长度填充为8的倍数。
+        # 这是利用NVIDIA GPU中的Tensor Core所必需的。
         input_tokens = _pad_to_alignment(input_tokens, multiple_of=8)
         input_positions = _pad_to_alignment(input_positions, multiple_of=8)
 
@@ -247,7 +244,7 @@ class Worker:
         blocks_to_swap_out: Dict[int, int],
         blocks_to_copy: Dict[int, List[int]],
     ) -> Dict[int, SequenceOutputs]:
-        # Issue cache operations.
+        # 发出缓存操作。
         issued_cache_op = False
         if blocks_to_swap_in:
             self.cache_engine.swap_in(blocks_to_swap_in)
@@ -264,18 +261,18 @@ class Worker:
         else:
             cache_events = None
 
-        # If there is no input, we don't need to execute the model.
+        # 如果没有输入，我们不需要执行模型。
         if not seq_group_metadata_list:
             if cache_events is not None:
                 for event in cache_events:
                     event.wait()
             return {}
 
-        # Prepare input tensors.
+        # 准备输入张量。
         input_tokens, input_positions, input_metadata = self._prepare_inputs(
             seq_group_metadata_list)
 
-        # Execute the model.
+        # 执行模型。
         output = self.model(
             input_ids=input_tokens,
             positions=input_positions,
@@ -291,14 +288,14 @@ def _init_distributed_environment(
     rank: int,
     distributed_init_method: str,
 ) -> None:
-    """Initialize the distributed environment."""
+    """初始化分布式环境。"""
     torch.distributed.init_process_group(
         backend="nccl",
         world_size=parallel_config.world_size,
         rank=rank,
         init_method=distributed_init_method,
     )
-    # A small all_reduce for warmup.
+    # 一个小的all_reduce用于预热。
     torch.distributed.all_reduce(torch.zeros(1).cuda())
     initialize_model_parallel(parallel_config.tensor_parallel_size,
                               parallel_config.pipeline_parallel_size)

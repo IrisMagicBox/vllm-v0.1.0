@@ -15,10 +15,10 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-"""Inference-only GPT-2 model compatible with HuggingFace weights.
+"""仅用于推理的与 HuggingFace 权重兼容的 GPT-2 模型。
 
-The input of the model is flattened to a 1D tensor of tokens. The model uses
-InputMetadata to extract the original 2D shape of the input.
+模型的输入被展平为一维张量的令牌。模型使用 InputMetadata 
+来提取输入的原始二维形状。
 """
 from typing import Dict, List, Optional, Tuple
 
@@ -150,11 +150,8 @@ class GPT2Model(nn.Module):
         assert config.reorder_and_upcast_attn == False
         self.embed_dim = config.hidden_size
 
-        # Optimization: While the vocab size of GPT-2 is 50257, we extend it
-        # to 50304 in order to make it divisible by 64.
-        # This improves performance since GPUs are faster if the dimension
-        # is divisible by 64. In addition, it allows us to shard the embedding
-        # layer across 2, 4, 8, or more GPUs.
+        # 优化：虽然 GPT-2 的词汇表大小为 50257，但我们将其扩展到 50304，以便能被 64 整除。
+        # 这提高了性能，因为当维度可被 64 整除时 GPU 更快。此外，它允许我们在 2、4、8 或更多 GPU 上分片嵌入层。
         vocab_size = ((config.vocab_size + 63) // 64) * 64
         self.wte = VocabParallelEmbedding(vocab_size, self.embed_dim)
         self.wpe = nn.Embedding(config.max_position_embeddings, self.embed_dim)
@@ -193,8 +190,7 @@ class GPT2LMHeadModel(nn.Module):
         super().__init__()
         self.config = config
         self.transformer = GPT2Model(config)
-        # TODO(zhuohan): create a new weight after implementing pipeline
-        #                parallelism
+        # TODO(zhuohan): 在实现流水线并行后创建新权重
         self.lm_head_weight = self.transformer.wte.weight
         self.sampler = Sampler(config.vocab_size)
 
@@ -225,17 +221,16 @@ class GPT2LMHeadModel(nn.Module):
         for name, loaded_weight in hf_model_weights_iterator(
             model_name_or_path, cache_dir, use_np_cache):
             if "lm_head.weight" in name:
-                # GPT-2 ties the weights of the embedding layer and the final
-                # linear layer.
+                # GPT-2 将嵌入层和最终线性层的权重绑定在一起。
                 continue
             if ".attn.bias" in name:
-                # Skip attention mask.
-                # NOTE: "c_attn.bias" should not be skipped.
+                # 跳过注意力掩码。
+                # 注意："c_attn.bias" 不应跳过。
                 continue
             name = "transformer." + name
 
-            # The HF's GPT-2 implementation uses Conv1D instead of Linear.
-            # Because of this, we need to transpose the weights.
+            # HF 的 GPT-2 实现使用 Conv1D 而不是 Linear。
+            # 因此，我们需要转置权重。
             for conv1d_weight_name in ["c_attn", "c_proj", "c_fc"]:
                 if conv1d_weight_name not in name:
                     continue
@@ -252,10 +247,10 @@ class GPT2LMHeadModel(nn.Module):
                 extra_rows = extra_rows.to(loaded_weight)
                 loaded_weight = torch.cat([loaded_weight, extra_rows], dim=0)
 
-            # For the fused QKV linear layer, manually shard the weights.
+            # 对于融合的 QKV 线性层，手动分片权重。
             if "c_attn" in name:
-                # GPT-2's fused QKV has the shape of [3 * num_heads * head_size, hidden_size].
-                # When tensor parallelism is used, we shard the weights along the head dimension.
+                # GPT-2 的融合 QKV 具有 [3 * num_heads * head_size, hidden_size] 的形状。
+                # 当使用张量并行时，我们沿头维度分片权重。
                 total_num_heads = self.config.num_attention_heads
                 hidden_size = self.config.hidden_size
                 head_size = hidden_size // total_num_heads
@@ -272,7 +267,7 @@ class GPT2LMHeadModel(nn.Module):
                     loaded_weight = loaded_weight[:, head_start:head_end, :]
                     loaded_weight = loaded_weight.reshape(-1)
                 else:
-                    raise ValueError(f"Unexpected parameter name {name}")
+                    raise ValueError(f"意外的参数名称 {name}")
             load_tensor_parallel_weights(param, loaded_weight, name,
                                          self._column_parallel_weights,
                                          self._row_parallel_weights,

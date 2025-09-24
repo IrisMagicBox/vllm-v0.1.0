@@ -1,4 +1,4 @@
-"""Utilities for selecting and loading models."""
+"""用于选择和加载模型的工具."""
 from typing import Type
 
 import torch
@@ -10,7 +10,7 @@ from vllm.model_executor.models import (GPT2LMHeadModel, GPTNeoXForCausalLM,
                                         LlamaForCausalLM, OPTForCausalLM)
 from vllm.model_executor.weight_utils import initialize_dummy_weights
 
-# TODO(woosuk): Lazy-load the model classes.
+# TODO(woosuk): 延迟加载模型类.
 _MODEL_REGISTRY = {
     "GPT2LMHeadModel": GPT2LMHeadModel,
     "GPTNeoXForCausalLM": GPTNeoXForCausalLM,
@@ -25,8 +25,8 @@ def _get_model_architecture(config: PretrainedConfig) -> Type[nn.Module]:
         if arch in _MODEL_REGISTRY:
             return _MODEL_REGISTRY[arch]
     raise ValueError(
-        f"Model architectures {architectures} are not supported for now. "
-        f"Supported architectures: {list(_MODEL_REGISTRY.keys())}"
+        f"目前不支持模型架构 {architectures}. "
+        f"支持的架构: {list(_MODEL_REGISTRY.keys())}"
     )
 
 
@@ -34,16 +34,16 @@ def get_model(model_config: ModelConfig) -> nn.Module:
     model_class = _get_model_architecture(model_config.hf_config)
     torch.set_default_dtype(model_config.dtype)
 
-    # Create a model instance.
-    # The weights will be initialized as empty tensors.
+    # 创建模型实例.
+    # 权重将被初始化为空张量.
     model = model_class(model_config.hf_config)
     if model_config.use_dummy_weights:
         model = model.cuda()
-        # NOTE(woosuk): For accurate performance evaluation, we assign
-        # random values to the weights.
+        # NOTE(woosuk): 为了准确的性能评估，我们将
+        # 随机值分配给权重.
         initialize_dummy_weights(model)
     else:
-        # Load the weights from the cached or downloaded files.
+        # 从缓存或下载的文件中加载权重.
         model.load_weights(
             model_config.model, model_config.download_dir,
             model_config.use_np_weights)

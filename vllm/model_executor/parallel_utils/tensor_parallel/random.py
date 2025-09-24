@@ -2,7 +2,7 @@
 # Adapted from https://github.com/NVIDIA/Megatron-LM/blob/main/megatron/core/tensor_parallel/random.py
 # Copyright (c) 2022, NVIDIA CORPORATION. All rights reserved.
 
-# Parts of the code here are adapted from PyTorch
+# 部分代码改编自 PyTorch
 # repo: https://github.com/pytorch/pytorch
 
 import contextlib
@@ -15,26 +15,26 @@ from vllm.model_executor.parallel_utils.parallel_state import (
     get_tensor_model_parallel_rank,
 )
 
-# Default name for the model parallel rng tracker.
+# 模型并行随机数生成器跟踪器的默认名称。
 _MODEL_PARALLEL_RNG_TRACKER_NAME = 'model-parallel-rng'
 
 
 def _set_cuda_rng_state(new_state, device=-1):
-    """Sets the random number generator state of the current GPU.
+    """设置当前 GPU 的随机数生成器状态。
 
-    Argumentss:
-        new_state (torch.ByteTensor): The desired state
-    This function is adapted from PyTorch repo (torch.cuda.set_rng_state)
-    with a single change: the input state is not cloned. Cloning caused
-    major performance issues for +4 GPU cases.
+    参数:
+        new_state (torch.ByteTensor): 期望的状态
+    此函数改编自 PyTorch 仓库 (torch.cuda.set_rng_state)
+    有一个变化：输入状态不被克隆。克隆在 +4 GPU 情况下导致
+    严重的性能问题。
     """
     if hasattr(_C, '_cuda_setRNGState') and callable(_C._cuda_setRNGState):
-        # older PyTorch
+        # 较老的 PyTorch
         def cb():
             with device_ctx_manager(device):
                 _C._cuda_setRNGState(new_state)
     else:
-        # newer PyTorch
+        # 较新的 PyTorch
         if device == -1:
             device = torch.device('cuda')
         elif isinstance(device, str):
@@ -54,111 +54,107 @@ def _set_cuda_rng_state(new_state, device=-1):
 
 
 class CudaRNGStatesTracker:
-    """Tracker for the cuda RNG states.
+    """cuda RNG 状态的跟踪器。
 
-    Using the `add` method, a cuda rng state is initialized based on
-    the input `seed` and is assigned to `name`. Later, by forking the
-    rng state, we can perform operations and return to our starting
-    cuda state.
+    使用 `add` 方法，基于输入的 `seed` 初始化 cuda rng 状态
+    并将其分配给 `name`。之后，通过 fork rng 状态，
+    我们可以执行操作并返回到我们开始的 cuda 状态。
     """
 
     def __init__(self):
-        # Map from a string name to the cuda rng state.
+        # 从字符串名称到 cuda rng 状态的映射。
         self.states_ = {}
-        # Seeds are just for book keeping and ensure no seed is set twice.
+        # 种子仅用于记录，确保没有种子被设置两次。
         self.seeds_ = set()
 
     def reset(self):
-        """Set to the initial state (no tracker)."""
+        """设置为初始状态（无跟踪器）。"""
         self.states_ = {}
         self.seeds_ = set()
 
     def get_states(self):
-        """Get rng states. Copy the dictionary so we have direct
-        pointers to the states, not just a pointer to the dictionary."""
+        """获取 rng 状态。复制字典，以便我们有直接
+        指向状态的指针，而不仅仅是字典的指针。"""
         states = {}
         for name in self.states_:
             states[name] = self.states_[name]
         return states
 
     def set_states(self, states):
-        """Set the rng states. For efficiency purposes, we do not check
-        the size of seed for compatibility."""
+        """设置 rng 状态。出于效率目的，我们不检查
+        种子大小的兼容性。"""
         self.states_ = states
 
     def add(self, name, seed):
-        """Track the rng state."""
-        # Check seed is not already used.
+        """跟踪 rng 状态。"""
+        # 检查种子是否已被使用。
         if seed in self.seeds_:
-            raise Exception('seed {} already exists'.format(seed))
+            raise Exception('种子 {} 已存在'.format(seed))
         self.seeds_.add(seed)
-        # Check that state is not already defined.
+        # 检查状态是否已定义。
         if name in self.states_:
-            raise Exception('cuda rng state {} already exists'.format(name))
-        # Get the current rng state.
+            raise Exception('cuda rng 状态 {} 已存在'.format(name))
+        # 获取当前 rng 状态。
         orig_rng_state = torch.cuda.get_rng_state()
-        # Set the new state and store it.
+        # 设置新状态并存储它。
         torch.cuda.manual_seed(seed)
         self.states_[name] = torch.cuda.get_rng_state()
-        # Reset rng state to what it was.
+        # 将 rng 状态重置为之前的状态。
         _set_cuda_rng_state(orig_rng_state)
 
     @contextlib.contextmanager
     def fork(self, name=_MODEL_PARALLEL_RNG_TRACKER_NAME):
-        """Fork the cuda rng state, perform operations, and exit with
-        the original state."""
-        # Check if we have added the state
+        """Fork cuda rng 状态，执行操作，并以
+        原始状态退出。"""
+        # 检查我们是否已添加状态
         if name not in self.states_:
-            raise Exception('cuda rng state {} is not added'.format(name))
-        # Store current rng state.
+            raise Exception('cuda rng 状态 {} 未添加'.format(name))
+        # 存储当前 rng 状态。
         orig_cuda_rng_state = torch.cuda.get_rng_state()
-        # Set rng state to the desired one
+        # 将 rng 状态设置为所需的
         _set_cuda_rng_state(self.states_[name])
-        # Do the stuff we wanted to do.
+        # 执行我们想做的操作。
         try:
             yield
         finally:
-            # Update the current rng state for later use.
+            # 更新当前 rng 状态以供后续使用。
             self.states_[name] = torch.cuda.get_rng_state()
-            # And set the state to the original state we started with.
+            # 并将状态设置为我们开始时的原始状态。
             _set_cuda_rng_state(orig_cuda_rng_state)
 
 
-# RNG tracker object.
+# RNG 跟踪器对象。
 _CUDA_RNG_STATE_TRACKER = CudaRNGStatesTracker()
 
 
 def get_cuda_rng_tracker():
-    """Get cuda rng tracker."""
+    """获取 cuda rng 跟踪器。"""
     return _CUDA_RNG_STATE_TRACKER
 
 
 def model_parallel_cuda_manual_seed(seed):
-    """Initialize model parallel cuda seed.
+    """初始化模型并行 cuda 种子。
 
-    This function should be called after the model parallel is
-    initialized. Also, no torch.cuda.manual_seed should be called
-    after this function. Basically, this is replacement for that
-    function.
-    Two set of RNG states are tracked:
-        default state: This is for data parallelism and is the same among a
-                       set of model parallel GPUs but different across
-                       different model paralle groups. This is used for
-                       example for dropout in the non-tensor-model-parallel regions.
-        tensor-model-parallel state: This state is different among a set of model
-                              parallel GPUs, but the same across data parallel
-                              groups. This is used for example for dropout in
-                              model parallel regions.
+    此函数应在模型并行初始化后调用。
+    此外，此函数之后不应调用 torch.cuda.manual_seed。
+    基本上，这是该函数的替代品。
+    跟踪两组 RNG 状态：
+        默认状态：这是用于数据并行的，在一组模型并行 GPU 中相同，
+                  但在不同的模型并行组之间不同。这用于
+                  例如非张量模型并行区域中的 dropout。
+        张量模型并行状态：此状态在一组模型并行 GPU 中不同，
+                          但在数据并行组中相同。
+                          这用于例如模型并行区域中的 dropout。
     """
-    # 2718 is just for fun and any POSITIVE value will work.
+    # 2718 只是为了好玩，任何正数值都可以。
     offset = seed + 2718
     tensor_model_parallel_seed = offset + get_tensor_model_parallel_rank()
-    # Data parallel gets the original seed.
+    # 数据并行获取原始种子。
     data_parallel_seed = seed
 
     _CUDA_RNG_STATE_TRACKER.reset()
-    # Set the default state.
+    # 设置默认状态。
     torch.cuda.manual_seed(data_parallel_seed)
-    # and model parallel state.
+    # 和模型并行状态。
     _CUDA_RNG_STATE_TRACKER.add(_MODEL_PARALLEL_RNG_TRACKER_NAME,
                                 tensor_model_parallel_seed)

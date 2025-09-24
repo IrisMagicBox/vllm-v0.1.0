@@ -8,6 +8,7 @@ from vllm import pos_encoding_ops
 
 
 def rotate_half(x: torch.Tensor) -> torch.Tensor:
+    """将张量旋转一半维度"""
     x1 = x[..., : x.shape[-1] // 2]
     x2 = x[..., x.shape[-1] // 2 :]
     return torch.cat((-x2, x1), dim=-1)
@@ -19,13 +20,14 @@ def apply_rotary_pos_emb(
     cos: torch.Tensor,
     sin: torch.Tensor,
 ) -> Tuple[torch.Tensor, torch.Tensor]:
+    """应用旋转位置编码"""
     q_embed = (q * cos) + (rotate_half(q) * sin)
     k_embed = (k * cos) + (rotate_half(k) * sin)
     return q_embed, k_embed
 
 
 class RefRotaryEmbeddingNeox(nn.Module):
-    """Reference implementation of the GPT-NeoX style rotary embedding."""
+    """GPT-NeoX风格旋转嵌入的参考实现"""
 
     def __init__(
         self,
@@ -37,7 +39,7 @@ class RefRotaryEmbeddingNeox(nn.Module):
         self.rotary_dim = dim
         self.max_position_embeddings = max_position_embeddings
 
-        # Create cos and sin embeddings.
+        # 创建cos和sin嵌入
         inv_freq = 1.0 / (base ** (torch.arange(0, dim, 2) / dim))
         t = torch.arange(max_position_embeddings).float()
         freqs = torch.einsum("i,j->ij", t, inv_freq.float())
@@ -71,7 +73,7 @@ class RefRotaryEmbeddingNeox(nn.Module):
         query = torch.cat((query_rot, query_pass), dim=-1)
         key = torch.cat((key_rot, key_pass), dim=-1)
 
-        # Output query/key shape: [num_tokens, num_tokens, head_size]
+        # 输出query/key形状: [num_tokens, num_tokens, head_size]
         return query, key
 
 
@@ -85,11 +87,12 @@ def run_rotary_embedding_neox(
     dtype: torch.dtype,
     base: int = 10000,
 ) -> None:
+    """运行NeoX风格旋转嵌入的测试"""
     positions = torch.randint(0, max_position, (num_tokens,), device='cuda')
     query = torch.randn(num_tokens, num_heads * head_size, dtype=dtype, device='cuda')
     key = torch.randn(num_tokens, num_heads * head_size, dtype=dtype, device='cuda')
 
-    # Create the rotary embedding.
+    # 创建旋转嵌入
     inv_freq = 1.0 / (base ** (torch.arange(0, rotary_dim, 2) / rotary_dim))
     t = torch.arange(max_position).float()
     freqs = torch.einsum('i,j -> ij', t, inv_freq.float())
@@ -98,7 +101,7 @@ def run_rotary_embedding_neox(
     cos_sin_cache = torch.cat((cos, sin), dim=-1)
     cos_sin_cache = cos_sin_cache.to(dtype=dtype, device='cuda')
 
-    # Run the kernel. The kernel is in-place, so we need to clone the inputs.
+    # 运行内核。内核是就地操作，因此我们需要克隆输入
     out_query = query.clone()
     out_key = key.clone()
     pos_encoding_ops.rotary_embedding_neox(
@@ -109,7 +112,7 @@ def run_rotary_embedding_neox(
         cos_sin_cache,
     )
 
-    # Run the reference implementation.
+    # 运行参考实现
     ref_rotary_embedding = RefRotaryEmbeddingNeox(
         dim=rotary_dim,
         max_position_embeddings=max_position,
@@ -123,15 +126,16 @@ def run_rotary_embedding_neox(
     ref_query = ref_query.view(num_tokens, num_heads * head_size)
     ref_key = ref_key.view(num_tokens, num_heads * head_size)
 
-    # Compare the results.
+    # 比较结果
     assert torch.allclose(out_query, ref_query, atol=1e-3, rtol=1e-5)
     assert torch.allclose(out_key, ref_key, atol=1e-3, rtol=1e-5)
 
 
 def test_rotary_embedding_neox() -> None:
+    """测试NeoX风格旋转嵌入的函数"""
     for dtype in [torch.half, torch.bfloat16, torch.float]:
         for head_size in [32, 64, 80, 96, 128, 160, 192, 256]:
-            print(f'Running tests for head_size={head_size} and dtype={dtype}')
+            print(f'运行 head_size={head_size} 和 dtype={dtype} 的测试')
             run_rotary_embedding_neox(
                 num_tokens=2145,
                 num_heads=5,

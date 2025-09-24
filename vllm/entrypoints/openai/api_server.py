@@ -1,4 +1,4 @@
-# Adapted from https://github.com/lm-sys/FastChat/blob/168ccc29d3f7edc50823016105c024fe2282732a/fastchat/serve/openai_api_server.py
+# 改编自 https://github.com/lm-sys/FastChat/blob/168ccc29d3f7edc50823016105c024fe2282732a/fastchat/serve/openai_api_server.py
 
 import argparse
 from http import HTTPStatus
@@ -25,7 +25,7 @@ from vllm.outputs import RequestOutput
 from vllm.sampling_params import SamplingParams
 from vllm.utils import random_uuid
 
-TIMEOUT_KEEP_ALIVE = 5 # seconds
+TIMEOUT_KEEP_ALIVE = 5 # 秒
 
 logger = init_logger(__name__)
 served_model = None
@@ -50,14 +50,14 @@ async def check_model(request) -> Optional[JSONResponse]:
         return
     ret = create_error_response(
         HTTPStatus.NOT_FOUND,
-        f"The model `{request.model}` does not exist.",
+        f"模型 `{request.model}` 不存在.",
     )
     return ret
 
 
 @app.get("/v1/models")
 async def show_available_models():
-    """Show available models. Right now we only have one model."""
+    """显示可用模型。目前我们只有一个模型。"""
     model_cards = [ModelCard(id=served_model, root=served_model,
                              permission=[ModelPermission()])]
     return ModelList(data=model_cards)
@@ -66,7 +66,7 @@ async def show_available_models():
 def create_logprobs(token_ids: List[int],
                     id_logprobs: List[Dict[int, float]],
                     initial_text_offset: int = 0) -> LogProbs:
-    """Create OpenAI-style logprobs."""
+    """创建 OpenAI 风格的 logprobs。"""
     logprobs = LogProbs()
     last_token_len = 0
     for token_id, id_logprob in zip(token_ids, id_logprobs):
@@ -87,40 +87,37 @@ def create_logprobs(token_ids: List[int],
 
 @app.post("/v1/completions")
 async def create_completion(raw_request: Request):
-    """Completion API similar to OpenAI's API.
+    """类似于 OpenAI API 的 Completion API。
 
-    See https://platform.openai.com/docs/api-reference/completions/create
-    for the API specification. This API mimics the OpenAI Completion API.
+    请参阅 https://platform.openai.com/docs/api-reference/completions/create
+    了解 API 规范。此 API 模仿 OpenAI Completion API。
 
-    NOTE: Currently we do not support the following features:
-        - echo (since the vLLM engine does not currently support
-          getting the logprobs of prompt tokens)
-        - suffix (the language models we currently support do not support
-          suffix)
-        - logit_bias (to be supported by vLLM engine)
+    注意：目前我们不支持以下功能：
+        - echo (因为 vLLM 引擎目前不支持获取 prompt tokens 的 logprobs)
+        - suffix (我们目前支持的语言模型不支持 suffix)
+        - logit_bias (vLLM 引擎将支持)
     """
     request = CompletionRequest(**await raw_request.json())
-    logger.info(f"Received completion request: {request}")
+    logger.info(f"收到 completion 请求: {request}")
 
     error_check_ret = await check_model(request)
     if error_check_ret is not None:
         return error_check_ret
 
     if request.echo:
-        # We do not support echo since the vLLM engine does not
-        # currently support getting the logprobs of prompt tokens.
+        # 我们不支持 echo，因为 vLLM 引擎目前不支持获取 prompt tokens 的 logprobs。
         return create_error_response(HTTPStatus.BAD_REQUEST,
-                                     "echo is not currently supported")
+                                     "echo 目前不被支持")
 
     if request.suffix is not None:
-        # The language models we currently support do not support suffix.
+        # 我们目前支持的语言模型不支持 suffix。
         return create_error_response(HTTPStatus.BAD_REQUEST,
-                                    "suffix is not currently supported")
+                                    "suffix 目前不被支持")
 
     if request.logit_bias is not None:
-        # TODO: support logit_bias in vLLM engine.
+        # TODO: 在 vLLM 引擎中支持 logit_bias。
         return create_error_response(HTTPStatus.BAD_REQUEST,
-                                     "logit_bias is not currently supported")
+                                     "logit_bias 目前不被支持")
 
     model_name = request.model
     request_id = f"cmpl-{random_uuid()}"
@@ -147,8 +144,8 @@ async def create_completion(raw_request: Request):
     result_generator = engine.generate(prompt, sampling_params,
                                        request_id)
 
-    # Similar to the OpenAI API, when n != best_of, we do not stream the
-    # results. In addition, we do not stream the results when use beam search.
+    # 类似于 OpenAI API，当 n != best_of 时，我们不流式传输结果。
+    # 此外，使用 beam search 时不流式传输结果。
     stream = (request.stream and
               (request.best_of is None or request.n == request.best_of) and
               not request.use_beam_search)
@@ -210,23 +207,23 @@ async def create_completion(raw_request: Request):
                     yield f"data: {response_json}\n\n"
             yield "data: [DONE]\n\n"
 
-    # Streaming response
+    # 流式响应
     if stream:
         background_tasks = BackgroundTasks()
-        # Abort the request if the client disconnects.
+        # 如果客户端断开连接，则中止请求。
         background_tasks.add_task(abort_request)
         return StreamingResponse(completion_stream_generator(),
                                  media_type="text/event-stream",
                                  background=background_tasks)
 
-    # Non-streaming response
+    # 非流式响应
     final_res: RequestOutput = None
     async for res in result_generator:
         if await raw_request.is_disconnected():
-            # Abort the request if the client disconnects.
+            # 如果客户端断开连接，则中止请求。
             await abort_request()
             return create_error_response(HTTPStatus.BAD_REQUEST,
-                                         "Client disconnected")
+                                         "客户端断开连接")
         final_res = res
     assert final_res is not None
     choices = []
@@ -260,8 +257,7 @@ async def create_completion(raw_request: Request):
     )
 
     if request.stream:
-        # When user requests streaming but we don't stream, we still need to
-        # return a streaming response with a single event.
+        # 当用户请求流式传输但我们不流式传输时，我们仍需要返回单个事件的流式响应。
         response_json = response.json(ensure_ascii=False)
         async def fake_stream_generator() -> AsyncGenerator[str, None]:
             yield f"data: {response_json}\n\n"
@@ -274,26 +270,25 @@ async def create_completion(raw_request: Request):
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(
-        description="vLLM OpenAI-Compatible RESTful API server."
+        description="vLLM OpenAI 兼容 RESTful API 服务器。"
     )
-    parser.add_argument("--host", type=str, default="localhost", help="host name")
-    parser.add_argument("--port", type=int, default=8000, help="port number")
+    parser.add_argument("--host", type=str, default="localhost", help="主机名")
+    parser.add_argument("--port", type=int, default=8000, help="端口号")
     parser.add_argument(
-        "--allow-credentials", action="store_true", help="allow credentials"
-    )
-    parser.add_argument(
-        "--allowed-origins", type=json.loads, default=["*"], help="allowed origins"
+        "--allow-credentials", action="store_true", help="允许凭据"
     )
     parser.add_argument(
-        "--allowed-methods", type=json.loads, default=["*"], help="allowed methods"
+        "--allowed-origins", type=json.loads, default=["*"], help="允许的来源"
     )
     parser.add_argument(
-        "--allowed-headers", type=json.loads, default=["*"], help="allowed headers"
+        "--allowed-methods", type=json.loads, default=["*"], help="允许的方法"
+    )
+    parser.add_argument(
+        "--allowed-headers", type=json.loads, default=["*"], help="允许的请求头"
     )
     parser.add_argument("--served-model-name", type=str, default=None,
-                        help="The model name used in the API. If not specified, "
-                             "the model name will be the same as the "
-                             "huggingface name.")
+                        help="API 中使用的模型名称。如果未指定，"
+                             "模型名称将与 huggingface 名称相同。")
     parser = AsyncEngineArgs.add_cli_args(parser)
     args = parser.parse_args()
 
@@ -312,7 +307,7 @@ if __name__ == "__main__":
     engine_args = AsyncEngineArgs.from_cli_args(args)
     engine = AsyncLLMEngine.from_engine_args(engine_args)
 
-    # A separate tokenizer to map token IDs to strings.
+    # 单独的 tokenizer 用于将 token ID 映射到字符串。
     tokenizer = get_tokenizer(args.model)
 
     uvicorn.run(app, host=args.host, port=args.port, log_level="info",

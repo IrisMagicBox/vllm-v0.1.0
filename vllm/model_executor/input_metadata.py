@@ -11,7 +11,7 @@ class InputMetadata:
 
     def __init__(
         self,
-        seq_groups: List[Tuple[List[int], SamplingParams]],     # List of (seq_ids, sampling_params).
+        seq_groups: List[Tuple[List[int], SamplingParams]],     # (seq_ids, sampling_params)的列表.
         seq_data: Dict[int, SequenceData],                      # Seq_id -> SequenceData.
         prompt_lens: List[int],
         slot_mapping: torch.Tensor,
@@ -40,7 +40,7 @@ class InputMetadata:
         assert context_lens.shape[0] == self.num_generation_tokens
 
     def __repr__(self) -> str:
-        # Print only useful metadata.
+        # 仅打印有用的元数据.
         return (f'InputMetadata('
                 f'num_valid_tokens={self.num_valid_tokens}, '
                 f'num_prompt_tokens={self.num_prompt_tokens}, '

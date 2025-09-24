@@ -1,4 +1,4 @@
-"""Multi-head attention."""
+"""多头注意力。"""
 from typing import Optional
 
 import torch
@@ -14,31 +14,26 @@ _SUPPORTED_HEAD_SIZES = [64, 80, 96, 128]
 
 
 class PagedAttention(nn.Module):
-    """GPT-style multi-head PagedAttention.
+    """GPT风格的多头分页注意力。
 
-    This class takes flattened 1D query, key, and value tensors as input. The
-    input 1D tensors can be split into three parts: the prompt tokens, the
-    generation tokens, and the paddings.
+    该类将扁平化的1D查询、键和值张量作为输入。输入的1D张量可以分为三个部分：
+    提示标记、生成标记和填充。
 
     |<------------------------------------- num_valid_tokens ------------------------------------->|
     |<--------------- num_prompt_tokens -------------->|<------- num_generation_tokens (M) ------->|
     |<--prompt_0-->|<--prompt_1-->|...|<--prompt_N-1-->|<--generation_0-->|...|<--generation_M-1-->|<--padding-->|
 
-    The prompts might have different lengths, while the generation tokens always
-    have length 1. The paddings are appended to make the input length a multiple
-    of 8, which is desirable for Tensor Cores.
+    提示可能有不同的长度，而生成标记的长度始终为1。添加填充是为了使输入长度成为8的倍数，
+    这对Tensor Cores是有利的。
 
-    The class does the following:
-    1. Perform multi_query_kv_attention for the prompts. This operation does
-        not use the KV cache.
-    2. Wait for the cache operations (e.g., swap, copy) to finish. The cache
-        operations are issued by the cache engine before executing the forward
-        pass of the model, and they are executed asynchronously.
-    3. Reshape and store the input key and value tensors in the KV cache.
-    4. Perform single_query_cached_kv_attention for the generation tokens.
-        This operation reads the previous key and value tensors from the KV
-        cache.
-    5. Output a flattened 1D tensor.
+    该类执行以下操作：
+    1. 对提示执行multi_query_kv_attention。此操作不使用KV缓存。
+    2. 等待缓存操作（例如，交换、复制）完成。缓存操作由缓存引擎在执行模型的前向传递之前
+       发出，并异步执行。
+    3. 重塑并将输入的键和值张量存储在KV缓存中。
+    4. 对生成标记执行single_query_cached_kv_attention。
+       此操作从KV缓存中读取之前的键和值张量。
+    5. 输出扁平化的1D张量。
     """
 
     def __init__(self, num_heads: int, head_size: int, scale: float) -> None:
@@ -49,8 +44,8 @@ class PagedAttention(nn.Module):
         self.attn_op = xops.fmha.cutlass.FwOp()
 
         if self.head_size not in _SUPPORTED_HEAD_SIZES:
-            raise ValueError(f"head_size ({self.head_size}) is not supported. "
-                             f"Supported head sizes: {_SUPPORTED_HEAD_SIZES}.")
+            raise ValueError(f"不支持的头尺寸 ({self.head_size})。 "
+                             f"支持的头尺寸：{_SUPPORTED_HEAD_SIZES}。")
 
     def multi_query_kv_attention(
         self,
@@ -60,7 +55,7 @@ class PagedAttention(nn.Module):
         value: torch.Tensor,                    # [num_prompt_tokens, num_heads, head_size]
         attn_bias: xops.AttentionBias,
     ) -> torch.Tensor:
-        # TODO(woosuk): The unsqueeze op may incur some CPU overhead. Optimize.
+        # TODO(woosuk): unsqueeze操作可能会带来一些CPU开销。优化。
         out = xops.memory_efficient_attention_forward(
             query.unsqueeze(0),
             key.unsqueeze(0),
@@ -70,7 +65,7 @@ class PagedAttention(nn.Module):
             scale=self.scale,
             op=self.attn_op,
         )
-        # TODO(woosuk): Unnecessary copy. Optimize.
+        # TODO(woosuk): 无需复制。优化。
         output.copy_(out.squeeze(0))
         return output
 
@@ -105,18 +100,17 @@ class PagedAttention(nn.Module):
         input_metadata: InputMetadata,
         cache_event: Optional[torch.cuda.Event],
     ) -> torch.Tensor:                          # [num_tokens, num_heads * head_size]
-        # NOTE: The query, key, and value tensors must be sliced from a qkv
-        # tensor of shape [num_tokens, 3 * num_heads * head_size].
+        # 注意：查询、键和值张量必须从形状为[num_tokens, 3 * num_heads * head_size]的qkv张量中切片。
 
-        # Reshape the query, key, and value tensors.
+        # 重塑查询、键和值张量。
         query = query.view(-1, self.num_heads, self.head_size)
         key = key.view(-1, self.num_heads, self.head_size)
         value = value.view(-1, self.num_heads, self.head_size)
 
-        # Pre-allocate the output tensor.
+        # 预分配输出张量。
         output = torch.empty_like(query)
 
-        # Compute the attention op for prompts.
+        # 计算提示的注意力操作。
         num_prompt_tokens = input_metadata.num_prompt_tokens
         if num_prompt_tokens > 0:
             self.multi_query_kv_attention(
@@ -127,17 +121,16 @@ class PagedAttention(nn.Module):
                 input_metadata.attn_bias,
             )
 
-        # Wait until the cache op is done.
+        # 等待缓存操作完成。
         if cache_event is not None:
             cache_event.wait()
 
-        # Reshape the keys and values and store them in the cache.
-        # When key_cache and value_cache are not provided, the new key
-        # and value vectors will not be cached.
+        # 重塑键和值并将它们存储在缓存中。
+        # 当未提供key_cache和value_cache时，新的键和值向量不会被缓存。
         num_valid_tokens = input_metadata.num_valid_tokens
         if (num_valid_tokens > 0 and key_cache is not None
             and value_cache is not None):
-            # The stride is 3 because the key and value are sliced from qkv.
+            # 步长为3，因为键和值是从qkv切片的。
             cache_ops.reshape_and_cache(
                 key[:num_valid_tokens],
                 value[:num_valid_tokens],
@@ -148,10 +141,9 @@ class PagedAttention(nn.Module):
 
         if input_metadata.num_generation_tokens > 0:
             assert key_cache is not None and value_cache is not None, (
-                "key_cache and value_cache must be provided when "
-                "generating tokens."
+                "生成标记时必须提供key_cache和value_cache。"
             )
-            # Compute the attention op for generation tokens.
+            # 计算生成标记的注意力操作。
             self.single_query_cached_kv_attention(
                 output[num_prompt_tokens:num_valid_tokens],
                 query[num_prompt_tokens:num_valid_tokens],
@@ -159,13 +151,13 @@ class PagedAttention(nn.Module):
                 value_cache,
                 input_metadata)
 
-        # Reshape the output tensor.
-        # NOTE(woosuk): The output tensor may include paddings.
+        # 重塑输出张量。
+        # 注意(woosuk)：输出张量可能包含填充。
         return output.view(-1, self.num_heads * self.head_size)
 
 
 class PagedAttentionWithRoPE(PagedAttention):
-    """PagedAttention with GPT-NeoX style rotary embedding."""
+    """带有GPT-NeoX风格旋转嵌入的分页注意力。"""
 
     def __init__(
         self,
@@ -178,7 +170,7 @@ class PagedAttentionWithRoPE(PagedAttention):
     ) -> None:
         super().__init__(num_heads, head_size, scale)
 
-        # Create the cos and sin cache.
+        # 创建cos和sin缓存。
         inv_freq = 1.0 / (base ** (torch.arange(0, rotary_dim, 2) / rotary_dim))
         t = torch.arange(max_position).float()
         freqs = torch.einsum('i,j -> ij', t, inv_freq.float())
@@ -186,11 +178,11 @@ class PagedAttentionWithRoPE(PagedAttention):
         sin = freqs.sin()
         cache = torch.cat((cos, sin), dim=-1)
 
-        # FIXME(woosuk): This assumes that we configure the default dtype when
-        # initializing the model. Make it more robust.
+        # FIXME(woosuk)：这假设我们在初始化模型时配置默认的dtype。
+        # 使其更加健壮。
         torch_dtype = torch.get_default_dtype()
         cache = cache.to(torch_dtype)
-        # Embedding size: [max_position, rotary_dim]
+        # 嵌入大小：[max_position, rotary_dim]
         self.register_buffer("cos_sin_cache", cache, persistent=False)
 
     def forward(
@@ -204,8 +196,7 @@ class PagedAttentionWithRoPE(PagedAttention):
         input_metadata: InputMetadata,
         cache_event: Optional[torch.cuda.Event],
     ) -> torch.Tensor:                          # [num_tokens, num_heads * head_size]
-        # Apply rotary embedding to the query and key before passing them
-        # to the attention op.
+        # 在将查询和键传递给注意力操作之前应用旋转嵌入。
         pos_encoding_ops.rotary_embedding_neox(
             positions,
             query,

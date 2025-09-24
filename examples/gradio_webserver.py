@@ -6,7 +6,7 @@ import requests
 
 
 def http_bot(prompt):
-    headers = {"User-Agent": "vLLM Client"}
+    headers = {"User-Agent": "vLLM 客户端"}
     pload = {
         "prompt": prompt,
         "stream": True,
@@ -24,10 +24,10 @@ def http_bot(prompt):
 def build_demo():
     with gr.Blocks() as demo:
         gr.Markdown(
-            "# vLLM text completion demo\n"
+            "# vLLM 文本补全演示\n"
         )
-        inputbox = gr.Textbox(label="Input", placeholder="Enter text and press ENTER")
-        outputbox = gr.Textbox(label="Output", placeholder="Generated result from the model")
+        inputbox = gr.Textbox(label="输入", placeholder="输入文本并按回车")
+        outputbox = gr.Textbox(label="输出", placeholder="模型生成的结果")
         inputbox.submit(http_bot, [inputbox], [outputbox])
     return demo
 
