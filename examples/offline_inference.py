@@ -12,7 +12,7 @@ prompts = [
 sampling_params = SamplingParams(temperature=0.8, top_p=0.95)
 
 # 创建一个LLM。
-llm = LLM(model="facebook/opt-125m")
+llm = LLM(model="/Users/liziang/code/QingCloud/python/vllm-study/models/Qwen2-0.5B-Instruct")
 # 从提示生成文本。输出是一个包含提示、生成文本和其他信息的RequestOutput对象列表。
 outputs = llm.generate(prompts, sampling_params)
 # 打印输出。

@@ -11,7 +11,7 @@ class SamplingParams:
 
     Args:
         n: 为给定提示返回的输出序列数量。
-        best_of: 从提示生成的输出序列数量。
+        best_of: 从提示生成的输出序列数量。参数表示 beam width（束宽）
             从这些`best_of`序列中，返回top `n`序列。
             `best_of`必须大于或等于`n`。当`use_beam_search`为True时，这被视为
             beam宽度。默认情况下，`best_of`

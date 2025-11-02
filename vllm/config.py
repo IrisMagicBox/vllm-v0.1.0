@@ -41,6 +41,9 @@ class ModelConfig:
         self.use_dummy_weights = use_dummy_weights
         self.seed = seed
 
+        # 使用 Hugging Face 的 AutoConfig.from_pretrained() 方法加载指定模型的配置
+        # 这会从 Hugging Face 模型仓库或本地路径加载模型的配置信息
+        # 配置信息包括模型架构、隐藏层大小、注意力头数等参数
         self.hf_config: PretrainedConfig = AutoConfig.from_pretrained(model)
         self.dtype = _get_and_verify_dtype(self.hf_config, dtype)
 

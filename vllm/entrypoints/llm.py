@@ -47,6 +47,7 @@ class LLM:
             seed=seed,
             **kwargs,
         )
+        #初始化时就已经把模型的各个配置（分词器、模型结构、分布式参数、批处理等等）加载完成
         self.llm_engine = LLMEngine.from_engine_args(engine_args)
         self.request_counter = Counter()
 
@@ -96,6 +97,8 @@ class LLM:
             num_requests = len(prompts)
         else:
             num_requests = len(prompt_token_ids)
+        # 将prompts列表中的prompt放置到_add_request
+        # prompt_token_ids 是一个可选的参数，用于直接指定提示（prompt）的token ID列表，而不是通过文本来表示，当你不希望vLLM自动对文本进行分词时，可以直接提供已经分好词的token ID，这样可以避免重复分词，提高效率
         for i in range(num_requests):
             prompt = prompts[i] if prompts is not None else None
             if prompt_token_ids is None:
@@ -111,6 +114,7 @@ class LLM:
         sampling_params: SamplingParams,
         prompt_token_ids: Optional[List[int]],
     ) -> None:
+        # 默认从 0 开始计数，每次调用 next(counter) 时，会返回当前计数值并将计数器加 1，确保了每个请求都有一个唯一的 ID
         request_id = str(next(self.request_counter))
         self.llm_engine.add_request(request_id, prompt, sampling_params,
                                     prompt_token_ids)
@@ -123,6 +127,7 @@ class LLM:
         # 运行引擎。
         outputs: List[RequestOutput] = []
         while self.llm_engine.has_unfinished_requests():
+            #调试查看这里输出的是什么？
             step_outputs = self.llm_engine.step()
             for output in step_outputs:
                 if output.finished():

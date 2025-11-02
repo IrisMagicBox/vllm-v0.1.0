@@ -19,6 +19,7 @@ class EngineArgs:
     worker_use_ray: bool = False
     pipeline_parallel_size: int = 1
     tensor_parallel_size: int = 1
+    # 默认情况下，每个块可以存储 16 个连续的 token
     block_size: int = 16
     swap_space: int = 4  # GiB
     gpu_memory_utilization: float = 0.90

@@ -68,6 +68,7 @@ class LLMEngine:
         self.log_stats = log_stats
         self._verify_args()
 
+        #初始化llm参数时就已经使用transformer的AutoConfig.from_pretrained将分词器配置加载完成了
         self.tokenizer = get_tokenizer(model_config.model)
         self.seq_counter = Counter()
 
@@ -130,6 +131,7 @@ class LLMEngine:
         """根据引擎参数创建 LLM 引擎。"""
         # 创建引擎配置。
         engine_configs = engine_args.create_engine_configs()
+        # 选择了 分布式执行的配置
         parallel_config = engine_configs[2]
         # 初始化集群。
         distributed_init_method, devices = initialize_cluster(parallel_config)
